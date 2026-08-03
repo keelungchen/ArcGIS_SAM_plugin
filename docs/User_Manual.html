@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAM3 Segmentation Toolbox for ArcGIS Pro — 使用手冊</title>
+<style>
+  :root {
+    --primary: #1a5fb4; --bg: #fafafa; --card: #ffffff;
+    --border: #d8d8d8; --code-bg: #f0f3f6; --warn-bg: #fff6e0;
+    --warn-border: #e5a50a; --tip-bg: #e8f5e9; --tip-border: #2e7d32;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    margin: 0; background: var(--bg); color: #222; line-height: 1.75;
+  }
+  header {
+    background: linear-gradient(135deg, #123c6e, var(--primary));
+    color: #fff; padding: 36px 8%;
+  }
+  header h1 { margin: 0 0 6px; font-size: 1.9em; }
+  header p { margin: 0; opacity: .9; }
+  nav {
+    background: #fff; border-bottom: 1px solid var(--border);
+    padding: 10px 8%; position: sticky; top: 0; z-index: 5;
+    font-size: .95em;
+  }
+  nav a { color: var(--primary); text-decoration: none; margin-right: 18px; }
+  nav a:hover { text-decoration: underline; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 20px 80px; }
+  section {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 24px 30px; margin: 24px 0;
+  }
+  h2 {
+    color: var(--primary); border-bottom: 2px solid var(--primary);
+    padding-bottom: 6px; margin-top: 0;
+  }
+  h3 { color: #123c6e; margin-top: 28px; }
+  code, pre {
+    font-family: Consolas, "Courier New", monospace;
+    background: var(--code-bg); border-radius: 4px;
+  }
+  code { padding: 1px 6px; font-size: .92em; }
+  pre {
+    padding: 14px 16px; overflow-x: auto; border: 1px solid var(--border);
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+  th { background: #eef3fa; }
+  .warn, .tip {
+    border-left: 5px solid; border-radius: 6px; padding: 12px 16px; margin: 14px 0;
+  }
+  .warn { background: var(--warn-bg); border-color: var(--warn-border); }
+  .tip { background: var(--tip-bg); border-color: var(--tip-border); }
+  .step { counter-increment: step; }
+  ol.big > li { margin-bottom: 10px; }
+  footer { text-align: center; color: #888; font-size: .85em; padding: 20px; }
+  kbd {
+    background: #eee; border: 1px solid #bbb; border-bottom-width: 2px;
+    border-radius: 4px; padding: 1px 6px; font-size: .88em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SAM3 Segmentation Toolbox for ArcGIS Pro</h1>
+  <p>以 SAM / RITM 深度學習模型在 ArcGIS Pro 中進行影像分割 — 安裝、使用與更新手冊（v2.2.0，適用 ArcGIS Pro 3.x，含 3.6.1）</p>
+</header>
+
+<nav>
+  <a href="#overview">總覽</a>
+  <a href="#requirements">系統需求</a>
+  <a href="#install">安裝</a>
+  <a href="#usage">工具箱使用</a>
+  <a href="#addin">即時互動編輯（Add-in）</a>
+  <a href="#tips">技巧與建議</a>
+  <a href="#troubleshoot">疑難排解</a>
+  <a href="#update">後續更新</a>
+</nav>
+
+<main>
+
+<!-- ============================================================ -->
+<section id="overview">
+<h2>1. 總覽</h2>
+<p>本插件讓你直接在 ArcGIS Pro 內使用 Meta 的
+<strong>Segment Anything Model 3 (SAM 3)</strong> 對影像圖層進行分割，並將結果輸出為 Polygon 圖徵類別（含信心分數欄位 <code>Score</code> 與提示來源欄位 <code>Prompt</code>）。它包含<strong>兩個部分</strong>：</p>
+<table>
+<tr><th>元件</th><th>形式</th><th>用途</th></tr>
+<tr><td><strong>SAM3 工具箱</strong></td><td>Python Toolbox（<code>SAM3_Toolbox.pyt</code>）</td><td>批次式分割：文字／點／框提示、自動全分割（工具 1–5），操作介面與內建 GP 工具相同</td></tr>
+<tr><td><strong>SAM3 Interactive Add-in</strong></td><td>C# Add-in（<code>SAM3Interactive.esriAddinX</code>）＋本機 Python 推論伺服器</td><td><strong>即時互動編輯（類 TagLab）</strong>：直接在地圖上點正負點，每點一下立即預覽遮罩，滿意後按空白鍵建立 polygon（見<a href="#addin">第 5 章</a>）</td></tr>
+</table>
+
+<div class="tip"><strong>架構說明：</strong>SAM 3 需要 PyTorch，只能在 Python 環境執行；而「逐次點擊、即時預覽」需要地圖滑鼠事件，只有 C# Add-in 做得到。
+因此即時互動功能採用「C# Add-in（前端，抓點擊、畫預覽、寫入圖徵）＋ 常駐 Python 伺服器（後端，在 <code>sam3_env</code> 內跑 SAM 3，僅限本機 127.0.0.1）」的組合，
+互動邏輯（工作區凍結、embedding 快取、每點即時推論）比照 <a href="https://github.com/cnr-isti-vclab/TagLab">TagLab</a> 的 Positive/Negative Clicks 工具實作。</div>
+
+<h3>提供的五個工具</h3>
+<table>
+<tr><th>工具</th><th>提示方式</th><th>用途</th></tr>
+<tr><td><strong>1 - Segment With Text Prompt</strong></td><td>文字（英文名詞短語）</td><td>在指定範圍內找出並分割「所有」符合描述的物件，例如 <code>building</code>、<code>red car</code>、<code>fish pond</code></td></tr>
+<tr><td><strong>2 - Segment With Point Prompts</strong></td><td>Point 圖徵（提示點）</td><td>用點擊位置指定要分割的物件；可用欄位標記前景(1)/背景(0)點</td></tr>
+<tr><td><strong>3 - Segment With Box Prompts</strong></td><td>Polygon 圖徵（提示框）</td><td>每個多邊形的外接矩形（envelope）作為一個框提示，各分割出一個物件</td></tr>
+<tr><td><strong>4 - Segment Everything</strong></td><td>自動（規則網格點）</td><td>在指定範圍內自動分割所有可辨識的物件</td></tr>
+<tr><td><strong>5 - Interactive Edit (Positive/Negative Clicks)</strong></td><td>直接在地圖上點擊正點（物件內）/ 負點（物件外）</td><td>類 <a href="https://github.com/cnr-isti-vclab/TagLab">TagLab</a> 的互動式編輯：少量點擊即自動推測物件邊界，結果直接累加到指定的 Polygon 圖層。<strong>只分析目前地圖視窗範圍</strong>，適合超大影像</td></tr>
+</table>
+
+<h3>檔案結構</h3>
+<pre><code>ArcGIS_SAM_plugin\
+├── SAM3_Toolbox.pyt            ← 工具箱主檔（加入 Catalog）
+├── sam3_tools\                 ← 核心 Python 程式（勿改名、須與 .pyt 同層）
+│   ├── config.py               ← 預設參數設定
+│   ├── engine.py               ← SAM 2/3 模型推論（含互動 Session）
+│   ├── ritm_engine.py          ← RITM 互動推論（TagLab 同款網路）
+│   ├── geoutils.py             ← 影像匯出 / 座標轉換 / 遮罩轉圖徵
+│   └── masktools.py            ← 遮罩後處理（輪廓抽取、平滑）
+├── python_server\
+│   ├── sam_server.py           ← Add-in 用的本機推論伺服器
+│   └── isegm\                  ← RITM 原始碼（get_ritm.bat 下載後出現）
+├── models\
+│   └── ritm_corals.pth         ← TagLab 珊瑚權重（get_ritm.bat 下載後出現）
+├── csharp_addin\
+│   ├── SAM3Interactive\        ← C# Add-in 原始碼（Pro SDK 3.6）
+│   └── dist\
+│       └── SAM3Interactive.esriAddinX  ← 建置完成的安裝檔（雙擊安裝）
+├── scripts\
+│   ├── setup_env.bat           ← 一鍵建立 Python 環境
+│   ├── check_install.py        ← 安裝檢查腳本
+│   ├── install_addin_config.bat← 寫入 Add-in 設定檔（安裝後執行一次）
+│   ├── get_ritm.bat            ← 啟用 RITM 引擎（下載程式碼＋權重）
+│   └── build_addin.ps1         ← 從原始碼重建 Add-in（免 Visual Studio）
+└── docs\
+    └── User_Manual.html        ← 本手冊</code></pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="requirements">
+<h2>2. 系統需求</h2>
+<table>
+<tr><th>項目</th><th>需求</th></tr>
+<tr><td>ArcGIS Pro</td><td>3.x（本手冊以 3.6.1 為準），Standard 或以上授權皆可（僅用到基本 GP 工具）</td></tr>
+<tr><td>作業系統</td><td>Windows 10 / 11（64 位元）</td></tr>
+<tr><td>GPU（強烈建議）</td><td>NVIDIA GPU、VRAM ≥ 8 GB、驅動程式為近期版本。無 GPU 也可用 CPU 執行，但單次推論可能需要數十秒至數分鐘</td></tr>
+<tr><td>硬碟空間</td><td>約 15 GB（複製 conda 環境 ~7 GB + PyTorch ~3 GB + SAM 3 模型權重 ~3.5 GB）</td></tr>
+<tr><td>網路</td><td>安裝套件與首次下載模型時需要連線；之後可離線使用</td></tr>
+<tr><td>Hugging Face 帳號</td><td>免費註冊即可。SAM 3 模型（<code>facebook/sam3</code>）為「gated model」，需先在網頁上同意授權條款</td></tr>
+</table>
+</section>
+
+<!-- ============================================================ -->
+<section id="install">
+<h2>3. 安裝步驟</h2>
+
+<div class="tip"><strong>最快的方式——一鍵安裝包：</strong>
+如果你拿到的是 <code>ArcGIS_SAM_plugin_Setup.zip</code>（在開發機用
+<code>scripts\make_package.ps1</code> 產生），只要：
+<ol>
+<li>解壓縮到任意資料夾（例如桌面）。</li>
+<li><strong>關閉 ArcGIS Pro</strong>，雙擊 <strong><code>INSTALL.bat</code></strong>。</li>
+</ol>
+安裝程式會自動完成本章＋第 5 章的全部步驟：檢查 ArcGIS Pro 版本與磁碟空間 → 建立
+<code>sam3_env</code> 環境 → 自動偵測 NVIDIA GPU 並安裝對應的 PyTorch →
+安裝其餘套件（含 RITM 相依） → 把執行檔複製到
+<code>%LOCALAPPDATA%\SAM3Interactive\app</code>（解壓的資料夾之後可刪）→
+寫入設定檔（8765 埠被占用時自動改用其他埠）→ 安裝 Add-in → 最終驗證。
+每一步失敗都會以 <code>PROBLEM</code>／<code>FIX</code> 兩行說明「哪裡出問題、怎麼解決」，
+完整記錄在 <code>install.log</code>；修正後再雙擊一次即可（已完成的步驟會自動跳過）。
+進階選項：<code>INSTALL.bat -Recreate</code>（重建環境）、<code>INSTALL.bat -CpuOnly</code>（強制 CPU 版 PyTorch）。
+安裝包內含 RITM 珊瑚模型權重，目標電腦不需要另外下載。<br>
+以下各節是<strong>手動安裝</strong>的等效步驟，一鍵安裝成功的話可以直接跳到第 5.3 節。</div>
+
+<h3>步驟 1：建立 Python 環境（一鍵腳本）</h3>
+<ol class="big">
+<li><strong>先關閉 ArcGIS Pro</strong>（環境複製時 Pro 不可開啟）。</li>
+<li>雙擊執行 <code>scripts\setup_env.bat</code>。腳本會依序：
+  <ul>
+    <li>用 ArcGIS Pro 內建 conda 複製 <code>arcgispro-py3</code> 為新環境 <code>sam3_env</code></li>
+    <li>詢問安裝 <kbd>G</kbd>PU（CUDA）或 <kbd>C</kbd>PU 版 PyTorch — 有 NVIDIA 顯卡請選 G</li>
+    <li>安裝 <code>transformers</code>（含 SAM 3 支援）、<code>accelerate</code>、<code>huggingface_hub</code>、<code>pillow</code></li>
+    <li>執行 <code>proswap</code> 將 ArcGIS Pro 的作用中環境切換為 <code>sam3_env</code></li>
+  </ul>
+</li>
+</ol>
+
+<div class="warn"><strong>注意：</strong>若 ArcGIS Pro 安裝在非預設路徑（不在 <code>C:\Program Files\ArcGIS\Pro</code>），
+請先用記事本編輯 <code>setup_env.bat</code> 開頭的 <code>PRO_PY_ROOT</code> 變數。</div>
+
+<p>不想用腳本的話，也可以在 ArcGIS Pro 的 <strong>Package Manager</strong>（設定 → Package Manager）手動複製環境並切換，
+再開啟 <strong>Python Command Prompt</strong>（開始選單 → ArcGIS 資料夾）執行：</p>
+<pre><code>activate sam3_env
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+pip install --upgrade "transformers&gt;=4.57" accelerate huggingface_hub pillow</code></pre>
+<p>（無 GPU 時第一行 pip 改為 <code>pip install torch torchvision</code>。）</p>
+
+<h3 id="model-download">步驟 2：取得 SAM 3 模型下載權限</h3>
+<ol class="big">
+<li>用瀏覽器開啟 <a href="https://huggingface.co/facebook/sam3">https://huggingface.co/facebook/sam3</a>，登入 Hugging Face 帳號並點選同意授權（Request access / Agree）。</li>
+<li>到 <a href="https://huggingface.co/settings/tokens">Settings → Access Tokens</a> 建立一個 <strong>Read</strong> 權限的 token。</li>
+<li>開啟「Python Command Prompt」，執行：
+<pre><code>activate sam3_env
+hf auth login</code></pre>
+貼上 token 完成登入。（舊版指令為 <code>huggingface-cli login</code>，二者皆可。）</li>
+</ol>
+
+<h3>步驟 3：驗證安裝</h3>
+<pre><code>activate sam3_env
+python "此專案路徑\scripts\check_install.py"</code></pre>
+<p>全部顯示 <code>[ OK ]</code> 即成功。加上 <code>--download</code> 參數可順便預先下載模型權重（約 3.5 GB，只需一次，之後快取於 <code>%USERPROFILE%\.cache\huggingface</code>）：</p>
+<pre><code>python "此專案路徑\scripts\check_install.py" --download</code></pre>
+
+<h3>步驟 4：在 ArcGIS Pro 加入工具箱</h3>
+<ol class="big">
+<li>啟動 ArcGIS Pro，開啟你的專案。</li>
+<li>先確認環境已切換：<strong>Project → Package Manager</strong>，Active Environment 應顯示 <code>sam3_env</code>。若不是，點選切換後重啟 Pro。</li>
+<li>在 <strong>Catalog</strong> 窗格 → <strong>Toolboxes</strong> 上按右鍵 → <strong>Add Toolbox</strong> → 選擇 <code>SAM3_Toolbox.pyt</code>。</li>
+<li>展開後即可看到五個工具。建議在 Catalog 對專案按右鍵將工具箱設為預設或加入 Favorites 方便日後使用。</li>
+</ol>
+
+<div class="tip"><strong>提示：</strong>首次執行任一工具時會載入（或下載）模型，需等待較久；同一個 ArcGIS Pro 工作階段內再次執行會重用已載入的模型，速度快很多。</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="usage">
+<h2>4. 工具箱使用方式</h2>
+
+<h3>通用觀念</h3>
+<ul>
+<li><strong>處理範圍（Processing Extent）</strong>優先順序：<code>Area of Interest</code> 多邊形圖層 → 提示圖徵範圍（自動外擴 25%）→ 目前地圖視窗範圍 → 整張影像。SAM 是逐影像處理的模型，<strong>請盡量縮小範圍</strong>（縮放地圖到目標區，或畫一個 AOI 多邊形），結果更準、速度更快。</li>
+<li><strong>Max Image Size</strong>：送入模型的影像長邊上限（預設 2048 px）。範圍太大會自動重採樣降低解析度 — 若覺得邊界太粗糙，請縮小範圍而不是調大此值。</li>
+<li>輸出皆為 <strong>Polygon 圖徵類別</strong>，欄位：<code>gridcode</code>（物件編號）、<code>Score</code>（信心/品質分數）、<code>Prompt</code>（提示來源）。</li>
+<li>輸入影像可為任何 arcpy 支援的柵格（GeoTIFF、影像服務、鑲嵌資料集…）；多波段取前三波段當 RGB，非 8-bit 影像自動做 2–98 百分位拉伸。</li>
+</ul>
+
+<h3>工具 1：Segment With Text Prompt（文字提示）</h3>
+<ol class="big">
+<li>將地圖縮放到目標區域（或準備一個 AOI 多邊形圖層）。</li>
+<li>開啟工具，設定：
+  <ul>
+  <li><strong>Input Raster</strong>：影像圖層</li>
+  <li><strong>Text Prompt</strong>：簡短英文名詞短語，如 <code>building</code>、<code>solar panel</code>、<code>boat</code>、<code>tree canopy</code></li>
+  <li><strong>Confidence Threshold</strong>：預設 0.5；漏抓調低、誤抓調高</li>
+  <li><strong>Output Polygon Feature Class</strong>：輸出位置</li>
+  </ul></li>
+<li>執行。模型會找出範圍內「所有」符合描述的物件實例。</li>
+</ol>
+<div class="tip">SAM 3 的文字提示適合「簡短名詞短語」（可含屬性，如 <code>red roof building</code>），不是長句子。請使用英文。</div>
+
+<h3>工具 2：Segment With Point Prompts（提示點）</h3>
+<ol class="big">
+<li>建立一個 Point 圖徵類別，在想分割的物件上各點一點（用編輯工具數位化）。</li>
+<li>（選用）新增短整數欄位如 <code>label</code>：<code>1</code>=前景（要的物件）、<code>0</code>=背景（要排除的區域）。不設定欄位時全部視為前景。</li>
+<li>開啟工具：
+  <ul>
+  <li><strong>Prompt Points</strong>：剛才的點圖層</li>
+  <li><strong>Label Field</strong>：（選用）前景/背景欄位</li>
+  <li><strong>All points describe ONE object</strong>：
+    勾選 = 所有點合起來描述「同一個」物件（例如一個大操場點 3 點）；
+    不勾（預設）= 每個前景點各自分割出一個物件，背景點套用到所有物件</li>
+  </ul></li>
+<li>執行。未指定 AOI 時，處理範圍自動取「點的外框外擴 25%」。</li>
+</ol>
+
+<h3>工具 3：Segment With Box Prompts（提示框 / Polygon）</h3>
+<ol class="big">
+<li>建立一個 Polygon 圖徵類別，在每個目標物件外圍畫一個大致框住它的多邊形（矩形最直覺；非矩形也可，會取其外接矩形當框）。</li>
+<li>開啟工具，指定 <strong>Prompt Polygons</strong> 與輸出位置，執行。</li>
+<li>每個輸入多邊形會得到一個精確貼合物件邊界的輸出多邊形。</li>
+</ol>
+<div class="tip">框提示通常是「指定單一物件」最穩定的方式，比單點提示更不容易分割出錯誤的部位。</div>
+
+<h3>工具 4：Segment Everything（自動全分割）</h3>
+<ol class="big">
+<li><strong>務必</strong>先縮小範圍（縮放地圖或給 AOI），否則耗時極長。</li>
+<li>參數：
+  <ul>
+  <li><strong>Grid Points Per Side</strong>：取樣網格密度（預設 32 → 1024 個提示點）。物件小而多時調高（如 48–64），大物件為主時可降低</li>
+  <li><strong>Min Mask Quality Score</strong>：品質門檻（預設 0.7），雜訊多時調高</li>
+  </ul></li>
+<li>執行。重疊的候選遮罩會依 IoU 自動去重。</li>
+</ol>
+
+<h3 id="tool5">工具 5：Interactive Edit（正負點互動編輯，類 TagLab）</h3>
+<p>這是模仿 <a href="https://github.com/cnr-isti-vclab/TagLab">TagLab</a>「Positive/Negative Clicks Segmentation」的編輯流程：
+直接在地圖上點幾個<strong>正點（物件內部）</strong>、必要時加幾個<strong>負點（物件外部、要排除的區域）</strong>，
+模型自動推測物件邊界並把多邊形<strong>加入（Append）你指定的目標圖層</strong>。一次分割一個物件，反覆執行即可逐一數化。</p>
+
+<div class="warn"><strong>重要：此工具只分析「目前地圖視窗範圍」內的影像。</strong>
+這是為了讓超大影像（大型正射鑲嵌、無人機拼圖等）也能秒級回應 — 請先把地圖<strong>縮放到目標物件</strong>，
+讓物件在畫面中佔明顯比例（建議佔畫面 1/10 以上），再執行工具。落在視窗外的點擊會被略過。</div>
+
+<h4>一次性準備：建立目標圖層</h4>
+<ol class="big">
+<li>在 Catalog 對你的地理資料庫（.gdb）按右鍵 → <strong>New → Feature Class</strong>，類型選 <strong>Polygon</strong>（例如命名 <code>seg_results</code>），完成後加入地圖。</li>
+<li>之後所有分割結果都會累加到這個圖層（工具會自動補上 <code>Score</code> 與 <code>Prompt</code> 欄位）。</li>
+</ol>
+
+<h4>操作步驟</h4>
+<ol class="big">
+<li>把地圖<strong>縮放到目標物件</strong>。</li>
+<li>開啟工具 <strong>5 - Interactive Edit (Positive/Negative Clicks)</strong>，設定：
+  <ul>
+  <li><strong>Input Raster</strong>：影像圖層</li>
+  <li><strong>Positive Clicks</strong>：點選參數旁的<strong>鉛筆（編輯）圖示</strong>後，直接在地圖上點擊物件「內部」1–5 個點。單一明確的物件通常 1–2 點就夠；形狀複雜或細長的物件多點幾個分散的點</li>
+  <li><strong>Negative Clicks</strong>（選用）：在物件「外部」但容易被誤含進來的區域點擊（例如緊鄰的相似物件、陰影、背景）</li>
+  <li><strong>Target Polygon Layer</strong>：剛才建立的結果圖層</li>
+  <li><strong>Smooth polygon boundary</strong>：預設勾選，輸出平滑邊界；需要逐像素精確邊界時取消勾選</li>
+  </ul></li>
+<li>執行（<kbd>Run</kbd>）。幾秒內（GPU）結果多邊形就會出現在目標圖層中。</li>
+<li>結果不理想時：<strong>不必重畫</strong> — 在圖層中刪除剛產生的多邊形，於工具中增／刪幾個點（多加正點涵蓋漏掉的部分、多加負點排除誤含的部分），再按 Run。</li>
+<li>換下一個物件：平移／縮放地圖到新目標，用參數旁的清除（<kbd>×</kbd>）或編輯功能移除上一輪的點，重新點擊並執行。</li>
+</ol>
+
+<div class="tip"><strong>使用技巧：</strong>
+<ul>
+<li>第一個正點盡量點在物件「中心」；負點點在模型容易誤判的邊界外側最有效。</li>
+<li>邊界精度由畫面解析度決定：<strong>放大 = 邊界更準</strong>。若訊息顯示影像被重採樣（resampling），代表視窗範圍相對太大，再放大一點。</li>
+<li>Geoprocessing 窗格可保持開啟，配合地圖平移縮放連續作業，工作流程與 TagLab 相當接近。</li>
+<li>模型只在第一次執行時載入，同一個 Pro 工作階段內後續每次點擊分割都很快。</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="addin">
+<h2>5. 即時互動編輯（C# Add-in，類 TagLab）</h2>
+<p>這是本插件的核心編輯功能，完整重現 TagLab「Positive/Negative Clicks Segmentation」的即時體驗——
+<strong>直接在 ArcGIS Pro 地圖上</strong>左鍵點正點、右鍵點負點，<strong>每點一下遮罩預覽立即更新</strong>（半透明青色覆蓋層），
+滿意後按空白鍵才把 polygon 寫入目標圖層。</p>
+
+<h3>5.1 運作原理與大影像處理</h3>
+<ul>
+<li><strong>工作區（Work Area）</strong>：啟用工具後<strong>第一次點擊</strong>時，會把「目前地圖視窗範圍」凍結為工作區（地圖上顯示<strong>白色虛線框</strong>），只把這塊影像送進模型——超大影像（大型正射鑲嵌）也能即時反應。放大越多、邊界越準。</li>
+<li><strong>可切換的後端引擎</strong>（見 5.5）：
+  <ul>
+  <li><strong>SAM</strong>（預設 <code>facebook/sam2.1-hiera-tiny</code>，~155MB、<strong>免申請授權</strong>、載入數秒）：工作區建立時計算一次影像 embedding，之後每次點擊只跑輕量解碼器，毫秒級回饋。</li>
+  <li><strong>RITM</strong>（<code>ritm_corals.pth</code>，~130MB）：<strong>與 TagLab 正負點工具完全相同的網路與珊瑚微調權重</strong>，每次點擊跑一次小網路（含上一次遮罩的迭代修正），CPU 也順，幾乎不佔 VRAM。</li>
+  </ul></li>
+<li><kbd>Esc</kbd> 只會<strong>清除目前的正負點</strong>，工作區（與已算好的影像 embedding）會保留，可立即重新點擊。要換到新的視窗範圍，請按功能區的 <strong>New Work Area</strong>（以目前視窗重建工作區）或 <strong>Cancel Work Area</strong>（純粹取消）。</li>
+<li>點到工作區（白色虛線框）<strong>外面</strong>時，該點會被忽略並跳出提醒，<strong>不會</strong>重建工作區——不用擔心誤點浪費時間。</li>
+<li><strong>「Preparing work area」可以中途取消</strong>：準備過程不再跳出擋住畫面的進度視窗，按 <kbd>Esc</kbd>、功能區 <strong>Cancel Work Area</strong> 或面板的 ✖／↺ 按鈕即可立即中止。另外，視窗範圍在原始解析度下超過約 5 億像素時，伺服器會<strong>直接回報錯誤請你先放大</strong>，不會悶著跑好幾分鐘看起來像當掉。</li>
+<li><strong>切換到其他編輯工具（選取、分割、屬性窗格…）不會失去工作區</strong>——正負點、預覽與工作區都會保留，切回 Click Segment（或用功能區按鈕）即可繼續。功能區的 Undo Point／Clear Points／Cancel Work Area 在其他工具作用中也能使用。</li>
+<li>每次按空白鍵儲存後，新 polygon 會<strong>自動被選取</strong>，可直接開「屬性（Attributes）」窗格填屬性、或用分割等選取型編輯工具處理。</li>
+<li>沒有在「Target」選圖層、地圖上也沒有可編輯的 polygon 圖層時，第一次儲存會自動在專案預設地理資料庫建立 <code>SAM_Segments</code> 圖層（含 <code>Score</code>／<code>Prompt</code> 欄位）並加入地圖。</li>
+<li>後端是一個只綁定 <code>127.0.0.1</code> 的本機 Python 伺服器（<code>python_server\sam_server.py</code>，在 <code>sam3_env</code> 內執行），由 Add-in 自動啟動，不對外開放；就算後端異常結束也不影響 ArcGIS Pro，按 Start SAM Server 重啟即可。</li>
+</ul>
+
+<h3>5.2 安裝（一次性）</h3>
+<ol class="big">
+<li>先完成<a href="#install">第 3 章</a>的 Python 環境安裝（<code>sam3_env</code>）。<br>
+    <strong>既有環境</strong>補裝一個套件即可：<code>activate sam3_env</code> 後 <code>pip install scikit-image</code>（新版 <code>setup_env.bat</code> 已包含）。<br>
+    <span style="color:#2e7d32">注意：Add-in 預設模型 <code>facebook/sam2.1-hiera-tiny</code> <strong>不需要</strong> Hugging Face 授權申請；第 3 章的授權步驟只有「工具箱的 SAM3 工具」與改用 SAM3 當互動後端時才需要。</span></li>
+<li>雙擊 <code>csharp_addin\dist\SAM3Interactive.esriAddinX</code> → 按「Install Add-In」。</li>
+<li>雙擊執行 <code>scripts\install_addin_config.bat</code>，寫入設定檔（Python 路徑、伺服器腳本位置、埠號）。設定檔位於
+<code>%LOCALAPPDATA%\SAM3Interactive\config.json</code>，之後可從功能區的 <strong>Server Settings</strong> 按鈕開啟修改。</li>
+<li>啟動 ArcGIS Pro，功能區應出現 <strong>SAM Segmentation</strong> 頁籤。</li>
+</ol>
+<div class="warn"><strong>注意：</strong>影像必須是<strong>本機檔案型柵格</strong>（GeoTIFF、檔案地理資料庫柵格、鑲嵌資料集等）；
+網路影像服務（WMS/影像服務圖層）不支援——後端需要直接讀取影像來源。</div>
+
+<h3>5.3 操作流程</h3>
+<ol class="big">
+<li>準備一個 <strong>Polygon 目標圖層</strong>加入地圖（建議欄位：<code>Score</code>（Double）、<code>Prompt</code>（Text, 255），有的話會自動填值；沒有也能用）。</li>
+<li>在 <strong>SAM Segmentation</strong> 頁籤：
+  <ul>
+  <li>（可選）按 <strong>Start Server</strong> 預先啟動並暖機（會顯示進度視窗）。實測：RITM／SAM2.1-tiny 約 20–60 秒完成暖機（含 arcpy 載入，一次性）；不預先啟動的話，啟用工具時也會自動處理。</li>
+  <li><strong>Imagery</strong>：選要分割的影像圖層；<strong>Target</strong>：選結果要寫入的 Polygon 圖層（不選則自動取地圖中第一個符合的圖層）。</li>
+  <li><strong>Model</strong>：直接下拉切換 SAM2.1 Tiny／SAM2.1 Small／SAM3／RITM，<strong>選擇會自動記住，不需改任何設定檔</strong>；切換後從下一個工作區開始生效。</li>
+  </ul></li>
+<li>把地圖<strong>縮放到目標物件</strong>，點 <strong>Click Segment</strong> 啟用工具（或直接按 <strong>New Work Area</strong>，會自動啟用工具並以目前視窗建立工作區）。此時地圖左上角會出現<strong>操作面板</strong>：即時顯示目前模型、正負點數量與分數、下一步提示，並有四個按鈕——<strong>✔ Save</strong>（同空白鍵）、<strong>↶ Undo</strong>（同 Ctrl+Z，退回上一點）、<strong>✖ Clear</strong>（同 Esc，清掉全部點、保留工作區）、<strong>↺ New Area</strong>（以目前視窗重建工作區）。</li>
+<li>開始點擊：
+<table>
+<tr><th>操作</th><th>功能</th></tr>
+<tr><td><strong>左鍵</strong></td><td>正點（物件內部，綠色圓點）→ 立即顯示遮罩預覽</td></tr>
+<tr><td><strong>右鍵</strong></td><td>負點（要排除的區域，紅色叉叉）→ 預覽立即修正</td></tr>
+<tr><td><kbd>空白鍵</kbd> 或面板「✔ Save」</td><td><strong>確認</strong>：把預覽 polygon 寫入目標圖層（含 Score），點擊清空，可直接圈下一個物件</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd>、面板「↶ Undo」或功能區 <strong>Undo Point</strong></td><td>撤銷上一個點（預覽同步回退）</td></tr>
+<tr><td><kbd>Esc</kbd>、面板「✖ Clear」或功能區 <strong>Clear Points</strong></td><td>清除目前全部正負點與預覽（<strong>保留工作區</strong>，立即重新點擊）</td></tr>
+<tr><td>功能區 <strong>New Work Area</strong> 或面板「↺ New Area」</td><td>以目前地圖視窗<strong>重建工作區</strong>（平移／縮放到新區域後使用）</td></tr>
+<tr><td>功能區 <strong>Cancel Work Area</strong></td><td>取消工作區與所有點（不建立新的）</td></tr>
+<tr><td>點到工作區外</td><td>該點被忽略並跳出提醒（不會重建工作區）</td></tr>
+</table></li>
+<li>全部完成後：<strong>Edit → Save</strong> 儲存編輯（Add-in 走標準編輯流程，結果先進入編輯暫存）。不用時可按 <strong>Stop SAM Server</strong> 釋放 GPU 記憶體。</li>
+</ol>
+<div class="tip"><strong>點擊技巧（與 TagLab 相同）：</strong>第一個正點點物件中心；模型誤含隔壁物件時在該處補一個負點；
+細長／複雜形狀多放幾個分散的正點；通常 1–4 個點就能得到理想邊界。訊息提示「resampling」表示視窗範圍太大被降採樣，請再放大。</div>
+
+<h3>5.4 後端引擎切換（SAM ⇄ RITM）</h3>
+<p><strong>直接用功能區的「Model」下拉選單切換即可</strong>——選擇會自動寫入設定檔並記住，從下一個工作區（按 New Work Area、或存檔後的下一次點擊）開始生效，不需重啟伺服器或手動改檔。
+下表是各選項的特性（進階使用者仍可從「進階設定」直接編輯 <code>%LOCALAPPDATA%\SAM3Interactive\config.json</code>）：</p>
+<table>
+<tr><th>設定</th><th>模型</th><th>特性</th><th>適用</th></tr>
+<tr><td><code>"engine": "sam"</code>（預設）</td><td><code>model_id</code> 指定，預設 <code>facebook/sam2.1-hiera-tiny</code>；也可填 <code>facebook/sam2.1-hiera-small</code> 或 <code>facebook/sam3</code></td><td>載入數秒、每點毫秒級（embedding 快取）、免申請授權（SAM3 除外）</td><td>一般地物（建物、船、農塘、樹冠…）</td></tr>
+<tr><td><code>"engine": "ritm"</code></td><td><code>ritm_checkpoint</code> 指定，預設 <code>models\ritm_corals.pth</code>（TagLab 珊瑚微調權重）</td><td><strong>與 TagLab 正負點工具完全相同</strong>；載入 1–3 秒、CPU 可用、幾乎不會 CUDA OOM</td><td>珊瑚礁／底棲正射影像，或無 GPU 的機器</td></tr>
+</table>
+<p><strong>啟用 RITM（一次性）</strong>：雙擊執行 <code>scripts\get_ritm.bat</code>——會自動下載官方 RITM 原始碼（isegm）、TagLab 的 <code>ritm_corals.pth</code> 權重、
+安裝 <code>opencv-python</code>／<code>easydict</code>，並把設定檔切到 <code>engine = "ritm"</code>。要切回 SAM 只需把 <code>engine</code> 改回 <code>"sam"</code>。</p>
+
+<h3>5.5 從原始碼重建 Add-in</h3>
+<p>改了 C# 程式碼、或 ArcGIS Pro 大版本升級後，需重建 <code>.esriAddinX</code>：</p>
+<pre><code>powershell -ExecutionPolicy Bypass -File scripts\build_addin.ps1
+:: 或建置後直接註冊到 Pro：
+powershell -ExecutionPolicy Bypass -File scripts\build_addin.ps1 -Install</code></pre>
+<ul>
+<li>需要 <strong>.NET 8 SDK</strong>（不需要 Visual Studio）。沒有的話，以使用者權限安裝：<br>
+<code>iwr https://dot.net/v1/dotnet-install.ps1 -OutFile di.ps1; .\di.ps1 -Channel 8.0</code></li>
+<li>建置腳本會自動處理 Esri 打包 targets 與 <code>dotnet build</code> 的相容性問題（過程中出現的 MSB4801 訊息是預期行為）。</li>
+<li>Pro 升級到 3.7/4.0 時：把 <code>csharp_addin\SAM3Interactive\SAM3Interactive.csproj</code> 中的
+<code>Esri.ArcGISPro.Extensions30</code> 版本與 <code>Config.daml</code> 的 <code>desktopVersion</code> 改成對應版本後重建。</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="tips">
+<h2>6. 技巧與建議</h2>
+<ul>
+<li><strong>邊界精度</strong>取決於送入模型的像素解析度：範圍越小、解析度越高、邊界越準。同一批物件可先用文字/自動工具粗抓，再用框提示逐一精修。</li>
+<li>輸出想要平滑邊界，可後處理：<code>Pairwise Buffer</code>（0 距離修復）、<code>Simplify Polygon</code> 或 <code>Smooth Polygon</code>。</li>
+<li>GPU VRAM 不足（CUDA out of memory）時：調低 Max Image Size（如 1024）、縮小範圍、或關閉其他佔用 GPU 的程式。</li>
+<li>NDVI、DEM 等單波段資料也能用（自動轉灰階 RGB），但 SAM 3 是以自然影像訓練的，衛星/航照 RGB 效果最好。</li>
+<li>常用參數組合可存成 <strong>Geoprocessing History → Save As Tool</strong> 或建立 ModelBuilder 模型批次化。</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="troubleshoot">
+<h2>7. 疑難排解</h2>
+<table>
+<tr><th>症狀</th><th>原因與解法</th></tr>
+<tr><td>工具箱加入後顯示紅色驚嘆號 / 打不開</td><td>ArcGIS Pro 的作用中環境不是 <code>sam3_env</code>。到 Package Manager 切換後重啟 Pro。也確認 <code>sam3_tools</code> 資料夾與 <code>.pyt</code> 在同一層。</td></tr>
+<tr><td><code>PyTorch is not installed</code> 或 <code>transformers does not provide Sam3Model</code></td><td>套件未裝或版本過舊。在 Python Command Prompt 執行 <code>activate sam3_env</code> 後重跑 <code>pip install --upgrade "transformers&gt;=4.57" accelerate</code>，並用 <code>check_install.py</code> 驗證。</td></tr>
+<tr><td>下載模型失敗（401 / gated repo）</td><td>尚未同意授權或未登入。見「<a href="#model-download">步驟 2：取得模型下載權限</a>」。</td></tr>
+<tr><td><code>CUDA out of memory</code></td><td>降低 Max Image Size、縮小處理範圍；或改用 CPU（移除 GPU 版 torch 改裝 CPU 版）。</td></tr>
+<tr><td>執行很慢</td><td>確認 <code>check_install.py</code> 顯示 CUDA available；顯示 CPU 表示裝到 CPU 版 PyTorch，重跑 setup 選 G。首次執行含模型載入本來就較久。</td></tr>
+<tr><td>結果位置偏移</td><td>確認影像有正確的空間參考。提示圖徵可以是不同座標系（程式會自動投影），但影像本身必須已正確配準。</td></tr>
+<tr><td>沒有輸出任何多邊形</td><td>調低 Confidence Threshold；更換文字提示用語；確認提示點/框確實落在處理範圍內（訊息視窗會顯示被略過的數量）。</td></tr>
+<tr><td>改了程式碼但行為沒變</td><td>在 Catalog 對工具箱按右鍵 → <strong>Refresh</strong>；若改的是 <code>engine.py</code>，需重啟 ArcGIS Pro（模型快取存於模組中）。</td></tr>
+<tr><td>工具 5 顯示 <code>No active map view found</code></td><td>此工具需要作用中的地圖視窗才能取得目前範圍。請先點一下地圖視窗（讓它成為作用中視圖），再從 Geoprocessing 窗格執行；不支援批次（Batch）或背景執行。</td></tr>
+<tr><td>工具 5 顯示 <code>No positive clicks inside the current map view</code></td><td>點擊的正點都落在目前視窗範圍外（例如點完後又平移了地圖）。請維持物件在畫面內，重新點擊後執行。</td></tr>
+<tr><td>工具 5 圈出的範圍不對／含到旁邊的東西</td><td>在被誤含的區域加 1–2 個負點；物件被切掉的部分加正點；並確認已放大到讓物件明顯可辨。訊息出現 resampling 字樣時代表解析度被降低，請再放大。</td></tr>
+<tr><td>工具 5 沒有鉛筆圖示、無法在地圖上點擊</td><td>Positive/Negative Clicks 參數需要顯示為「互動輸入」。請確認是在地圖開啟的專案中執行工具；若仍異常，對工具箱 Refresh 或重啟 Pro 後再試。</td></tr>
+<tr><td>【Add-in】功能區沒有 SAM3 頁籤</td><td>確認已安裝 <code>SAM3Interactive.esriAddinX</code>（Pro：Settings → Add-In Manager 應列出「SAM3 Interactive Segmentation」）。Add-in 是為 Pro 3.6 建置的，更舊的 Pro 版本需依 5.5 節改版本號重建。</td></tr>
+<tr><td>【Add-in】顯示 <code>RITM checkpoint not found</code> 或 <code>isegm not found</code></td><td>設定檔的 <code>engine</code> 是 <code>ritm</code> 但還沒安裝 RITM。執行 <code>scripts\get_ritm.bat</code>；或把 <code>engine</code> 改回 <code>sam</code>。</td></tr>
+<tr><td>【Add-in】顯示 <code>python_exe not found</code> / <code>server_script not found</code></td><td>設定檔缺漏。執行 <code>scripts\install_addin_config.bat</code>，或按功能區 <strong>Server Settings</strong> 手動修正 <code>config.json</code> 內的路徑。</td></tr>
+<tr><td>【Add-in】伺服器啟動逾時或啟動後立即結束</td><td>開啟 <code>%LOCALAPPDATA%\SAM3Interactive\server.log</code> 看 Python 端錯誤。常見原因：sam3_env 缺套件（跑 <code>check_install.py</code>）、模型未授權（見步驟 2）、埠被占用（改 config.json 的 <code>port</code>）。</td></tr>
+<tr><td>【Add-in】第一次點擊等很久</td><td>正常：首次點擊要載入模型＋計算工作區 embedding。同一工作階段之後的點擊都是即時的。可先按 <strong>Start SAM Server</strong> 暖機。</td></tr>
+<tr><td>【Add-in】點擊沒反應或提示不支援</td><td>影像須為本機檔案型柵格（GeoTIFF、FGDB 柵格…），不支援網路影像服務；並確認 Imagery 下拉選對圖層。</td></tr>
+<tr><td>【Add-in】按空白鍵沒有建立圖徵</td><td>要先有遮罩預覽（至少一個正點）；Target 圖層必須可編輯（未鎖定、非唯讀）。訊息中心（右上鈴鐺）會顯示失敗原因。</td></tr>
+</table>
+<p>回報問題時，請附上工具執行訊息視窗（View Details）中的完整錯誤堆疊。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="update">
+<h2>8. 後續更新如何處理</h2>
+
+<h3>8.1 更新插件程式碼</h3>
+<ol class="big">
+<li>備份整個 <code>ArcGIS_SAM_plugin</code> 資料夾（直接複製一份即可）。</li>
+<li>用新版檔案覆蓋 <code>SAM3_Toolbox.pyt</code> 與 <code>sam3_tools\</code> 資料夾。<strong>路徑不要改變</strong>，已加入專案的工具箱參照的是檔案路徑，路徑不變就不需重新加入。</li>
+<li>在 ArcGIS Pro 的 Catalog 對工具箱按右鍵 → <strong>Refresh</strong>（或重啟 Pro）。</li>
+<li><strong>Add-in 部分</strong>：若 <code>csharp_addin\</code> 或 <code>python_server\</code> 有更新——
+  <ul>
+  <li>只有 <code>python_server\</code> / <code>sam3_tools\</code> 變動：覆蓋檔案後按功能區 <strong>Stop SAM Server</strong> 再 <strong>Start SAM Server</strong> 即生效，Add-in 不用重裝。</li>
+  <li><code>csharp_addin\</code>（C#）變動：取得新的 <code>SAM3Interactive.esriAddinX</code> 雙擊重新安裝（或依 5.5 節自行重建），並重啟 Pro。</li>
+  </ul></li>
+</ol>
+<div class="tip">建議把此資料夾納入 git 版本控制（<code>git init</code>），每次更新前先 commit，出問題可隨時 <code>git checkout</code> 回上一版。</div>
+
+<h3>8.2 更新 Python 套件（transformers / PyTorch）</h3>
+<pre><code>activate sam3_env
+pip install --upgrade transformers accelerate huggingface_hub
+python "專案路徑\scripts\check_install.py"</code></pre>
+<div class="warn"><strong>注意：</strong>更新前先確認目前可用（跑一次工具）。若更新後出錯，可鎖回舊版，例如：
+<code>pip install "transformers==4.57.*"</code>。PyTorch 一般不需要頻繁更新，除非新版 transformers 要求。</div>
+
+<h3>8.3 更新 / 更換 SAM 模型</h3>
+<ul>
+<li>Meta 若釋出新版權重（例如 <code>facebook/sam3.1</code> 之類的新 repo），不需改程式：每個工具的 <strong>Advanced → Model ID</strong> 參數填入新的 Hugging Face repo id 即可（首次會自動下載並快取）。</li>
+<li>要永久更換預設模型，編輯 <code>sam3_tools\config.py</code> 的 <code>DEFAULT_MODEL_ID</code>。</li>
+<li>模型快取位於 <code>%USERPROFILE%\.cache\huggingface\hub</code>，舊模型不用時可整個資料夾刪除釋放空間。</li>
+</ul>
+
+<h3>8.4 ArcGIS Pro 大版本升級後（例如 3.6 → 3.7 / 4.0）</h3>
+<p>Pro 升級會附帶新的 <code>arcgispro-py3</code> 基底環境，舊的 clone 環境可能與新版不相容。標準處理流程：</p>
+<ol class="big">
+<li>升級 ArcGIS Pro。</li>
+<li>刪除舊環境：開啟 Python Command Prompt 執行 <code>conda env remove -n sam3_env</code>（或直接刪除 <code>%LOCALAPPDATA%\ESRI\conda\envs\sam3_env</code>）。</li>
+<li>重新執行 <code>scripts\setup_env.bat</code> 重建環境（模型權重快取仍在，不需重新下載）。</li>
+<li>重啟 Pro、確認 Active Environment 為 <code>sam3_env</code>，工具箱不需重新加入。</li>
+</ol>
+
+<h3>8.5 版本紀錄建議</h3>
+<p>每次更新請在 <code>README.md</code> 的 Changelog 區塊記錄日期、變更內容與對應的 transformers/torch 版本（<code>pip list</code> 可查），方便回溯。</p>
+
+<h3>8.6 本插件版本紀錄</h3>
+<table>
+<tr><th>版本</th><th>日期</th><th>內容</th></tr>
+<tr><td><strong>2.2.0</strong></td><td>2026-07-05</td><td>介面大改版：功能區全面中文化（「SAM 分割」頁籤）；新增<strong>「模型」下拉選單</strong>（SAM2.1 Tiny／Small、SAM3、RITM 直接切換並自動記住，不需改設定檔）；工具啟用時地圖上顯示<strong>操作面板</strong>（模型／點數／分數／狀態提示＋儲存、<strong>清除點</strong>、重設區域按鈕）；伺服器啟動與工作區準備加入進度視窗；伺服器啟動時<strong>背景暖機</strong>（預載 arcpy 與模型）。修正：RITM 權重的 <code>models.isegm</code> 命名空間載入錯誤、torch/OpenCV 的 OpenMP 衝突造成的當機（OMP Error #15）、get_ritm.bat 下載失敗未被偵測的問題（RITM 原始庫已下架，改抓 TagLab 內建副本）。</td></tr>
+<tr><td><strong>2.1.0</strong></td><td>2026-07-04</td><td>互動後端<strong>雙引擎化</strong>：預設改為 <code>facebook/sam2.1-hiera-tiny</code>（~155MB、免授權、載入數秒、免暖機），並新增 <strong>RITM 引擎</strong>——與 TagLab 正負點工具<strong>完全相同</strong>的網路與珊瑚微調權重（<code>ritm_corals.pth</code>，CPU 可用、幾乎不佔 VRAM）。設定檔 <code>engine</code> 欄位切換（見 5.4）；新增 <code>scripts\get_ritm.bat</code>、<code>sam3_tools\ritm_engine.py</code>。</td></tr>
+<tr><td><strong>2.0.0</strong></td><td>2026-07-04</td><td>新增 <strong>SAM3 Interactive C# Add-in</strong>：直接在地圖上左鍵正點／右鍵負點、遮罩<strong>即時預覽</strong>，空白鍵確認建立 polygon（互動邏輯比照 TagLab：工作區凍結目前視窗、embedding 快取、Ctrl+Z／Esc）。含本機 Python 推論伺服器（<code>python_server\sam_server.py</code>）、<code>engine.InteractiveSession</code>、<code>masktools.py</code>、建置腳本 <code>build_addin.ps1</code>、設定腳本 <code>install_addin_config.bat</code>。手冊新增第 5 章。</td></tr>
+<tr><td><strong>1.1.0</strong></td><td>2026-07-04</td><td>新增工具 <strong>5 - Interactive Edit (Positive/Negative Clicks)</strong>（GP 工具版，非即時，保留作為備用）：類 TagLab 的正負點分割；只分析目前地圖視窗範圍；結果 Append 到既有 Polygon 圖層；可選邊界平滑。</td></tr>
+<tr><td><strong>1.0.0</strong></td><td>2026-07-03</td><td>首次釋出：文字／點／框提示、自動全分割、HTML 使用手冊。</td></tr>
+</table>
+</section>
+
+</main>
+
+<footer>SAM Segmentation Toolbox &amp; Interactive Add-in v2.2.0 — 2026-07 · 模型：Meta SAM 2.1 / SAM 3、RITM（TagLab 珊瑚權重），各依其授權條款使用</footer>
+</body>
+</html>

@@ -1,0 +1,51 @@
+using System.Linq;
+using ArcGIS.Desktop.Framework.Contracts;
+
+namespace SAM3Interactive
+{
+    /// <summary>Ribbon drop-down for picking the inference model.
+    /// Selection is applied immediately (next work area) and persisted
+    /// to config.json - no manual config editing needed.</summary>
+    internal class ModelComboBox : ComboBox
+    {
+        private class Option : ComboBoxItem
+        {
+            public string Engine { get; }
+            public string ModelId { get; }
+
+            public Option(string text, string engine, string modelId)
+                : base(text)
+            {
+                Engine = engine;
+                ModelId = modelId;
+            }
+        }
+
+        public ModelComboBox()
+        {
+            Add(new Option("SAM2.1 Tiny (fast, default)",
+                "sam", "facebook/sam2.1-hiera-tiny"));
+            Add(new Option("SAM2.1 Small (more accurate)",
+                "sam", "facebook/sam2.1-hiera-small"));
+            Add(new Option("SAM3 (heaviest, needs HF login)",
+                "sam", "facebook/sam3"));
+            Add(new Option("RITM (TagLab corals)",
+                "ritm", null));
+
+            var engine = SamModule.CurrentEngine;
+            var modelId = SamModule.CurrentModelId;
+            SelectedItem = ItemCollection.OfType<Option>()
+                .FirstOrDefault(o => o.Engine == engine &&
+                    (engine == "ritm" || o.ModelId == modelId))
+                ?? ItemCollection.OfType<Option>().First();
+        }
+
+        protected override void OnSelectionChange(ComboBoxItem item)
+        {
+            if (item is not Option o)
+                return;
+            SamModule.SetModelSelection(
+                o.Engine, o.ModelId ?? SamModule.CurrentModelId);
+        }
+    }
+}

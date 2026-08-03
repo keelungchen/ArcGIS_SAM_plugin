@@ -1,0 +1,67 @@
+# ---------------------------------------------------------------
+#  Local / personal files - NEVER commit these
+# ---------------------------------------------------------------
+# Claude Code local settings: contains absolute paths of this machine
+.claude/
+.claude/settings.local.json
+
+# Add-in runtime configuration (machine-specific paths + port)
+config.json
+**/SAM3Interactive/config.json
+
+# Installer logs (contain your username and full local paths)
+install.log
+*.log
+
+# Hugging Face / credentials - must never be committed
+.env
+.env.*
+*.token
+hf_token*
+token.txt
+secrets.json
+
+# ---------------------------------------------------------------
+#  Build artifacts (contain absolute paths such as C:\Users\<you>\)
+# ---------------------------------------------------------------
+[Oo]bj/
+[Bb]in/
+!csharp_addin/dist/
+*.user
+*.suo
+.vs/
+project.assets.json
+*.nuget.g.props
+*.nuget.g.targets
+*.nuget.dgspec.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---------------------------------------------------------------
+#  Large downloadable assets - fetched by the setup scripts
+#  (see README: "Model weights are not included in this repo")
+# ---------------------------------------------------------------
+# RITM / TagLab checkpoint (~39 MB) - scripts/get_ritm.bat downloads it
+models/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
+# Vendored third-party RITM inference code - scripts/get_ritm.bat fetches it
+python_server/isegm/
+
+# Portable installer package (~36 MB) - scripts/make_package.ps1 builds it
+dist_package/
+
+# ---------------------------------------------------------------
+#  OS noise
+# ---------------------------------------------------------------
+Thumbs.db
+desktop.ini
+.DS_Store

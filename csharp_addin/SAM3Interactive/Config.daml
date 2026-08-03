@@ -1,0 +1,88 @@
+<ArcGIS defaultAssembly="SAM3Interactive.dll" defaultNamespace="SAM3Interactive" xmlns="http://schemas.esri.com/DADF/Registry" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schemas.esri.com/DADF/Registry file:///C:/Program%20Files/ArcGIS/Pro/bin/ArcGIS.Desktop.Framework.xsd">
+  <AddInInfo id="{8f3b0f0a-9c1e-4f5d-b1a2-6d9d1e7c4a55}" version="2.5.0" desktopVersion="3.6">
+    <Name>SAM Interactive Segmentation</Name>
+    <Description>TagLab-style real-time positive/negative click segmentation (SAM2.1 / SAM3 / RITM). Left-click = positive, right-click = negative, Space = save polygon.</Description>
+    <Image>Images\AddinDesktop32.png</Image>
+    <Author>ArcGIS_SAM_plugin</Author>
+    <Company>ArcGIS_SAM_plugin</Company>
+    <Date>2026-07-06</Date>
+    <Subject>Editing</Subject>
+  </AddInInfo>
+  <modules>
+    <insertModule id="SAM3Interactive_Module" className="SamModule" autoLoad="true" caption="SAM Interactive">
+      <tabs>
+        <tab id="SAM3Interactive_Tab" caption="SAM Segmentation">
+          <group refID="SAM3Interactive_LayersGroup" />
+          <group refID="SAM3Interactive_ToolGroup" />
+          <group refID="SAM3Interactive_WorkAreaGroup" />
+          <group refID="SAM3Interactive_ServerGroup" />
+        </tab>
+      </tabs>
+      <groups>
+        <group id="SAM3Interactive_LayersGroup" caption="Layers and Model" appearsOnAddInTab="false">
+          <comboBox refID="SAM3Interactive_RasterCombo" />
+          <comboBox refID="SAM3Interactive_TargetCombo" />
+          <comboBox refID="SAM3Interactive_ModelCombo" />
+        </group>
+        <group id="SAM3Interactive_ToolGroup" caption="Interactive Segmentation" appearsOnAddInTab="false">
+          <tool refID="SAM3Interactive_SegmentTool" size="large" />
+        </group>
+        <group id="SAM3Interactive_WorkAreaGroup" caption="Work Area and Points" appearsOnAddInTab="false">
+          <button refID="SAM3Interactive_NewWorkAreaButton" size="middle" />
+          <button refID="SAM3Interactive_CancelWorkAreaButton" size="middle" />
+          <button refID="SAM3Interactive_UndoClickButton" size="middle" />
+          <button refID="SAM3Interactive_ClearClicksButton" size="middle" />
+        </group>
+        <group id="SAM3Interactive_ServerGroup" caption="Inference Server" appearsOnAddInTab="false">
+          <button refID="SAM3Interactive_StartServerButton" size="middle" />
+          <button refID="SAM3Interactive_StopServerButton" size="middle" />
+          <button refID="SAM3Interactive_OpenConfigButton" size="middle" />
+        </group>
+      </groups>
+      <controls>
+        <tool id="SAM3Interactive_SegmentTool" caption="Click Segment" className="InteractiveSegmentTool" loadOnClick="true" condition="esri_mapping_mapPane" smallImage="GenericButtonBlue16" largeImage="GenericButtonBlue32">
+          <tooltip heading="Click Segmentation (TagLab-style points)">
+            Left-click = positive point (inside the object), right-click = negative point (area to exclude); the mask preview updates after every click.
+            Space = save the polygon to the target layer; Ctrl+Z = undo the last point; Esc = clear the points (the work area stays).
+            The first click freezes the current map view as the work area (white dashed box) - zoom to the target object first, or use 'New Work Area'.
+          </tooltip>
+        </tool>
+        <button id="SAM3Interactive_NewWorkAreaButton" caption="New Work Area" className="NewWorkAreaButton" loadOnClick="true" condition="esri_mapping_mapPane" smallImage="GenericButtonBlue16" largeImage="GenericButtonBlue32">
+          <tooltip heading="New Work Area">Freeze the current map view as the work area (image export + model encoding). Replaces the existing work area and its points. Activates the Click Segment tool when needed.</tooltip>
+        </button>
+        <button id="SAM3Interactive_CancelWorkAreaButton" caption="Cancel Work Area" className="CancelWorkAreaButton" loadOnClick="true" condition="esri_mapping_mapPane" smallImage="GenericButtonRed16" largeImage="GenericButtonRed32">
+          <tooltip heading="Cancel Work Area">Abort a work area that is still being prepared (image export / encoding), or discard the current work area and all points. The next click (or 'New Work Area') builds a new one from the view.</tooltip>
+        </button>
+        <button id="SAM3Interactive_UndoClickButton" caption="Undo Point" className="UndoClickButton" loadOnClick="true" condition="esri_mapping_mapPane" smallImage="GenericButtonYellow16" largeImage="GenericButtonYellow32">
+          <tooltip heading="Undo Point">Remove the last positive/negative point and refresh the preview (same as Ctrl+Z).</tooltip>
+        </button>
+        <button id="SAM3Interactive_ClearClicksButton" caption="Clear Points" className="ClearClicksButton" loadOnClick="true" condition="esri_mapping_mapPane" smallImage="GenericButtonGray16" largeImage="GenericButtonGray32">
+          <tooltip heading="Clear Points">Remove all points and the preview but keep the work area (same as Esc), so the next object segments instantly.</tooltip>
+        </button>
+        <button id="SAM3Interactive_StartServerButton" caption="Start Server" className="StartServerButton" loadOnClick="true" smallImage="GenericButtonGreen16" largeImage="GenericButtonGreen32">
+          <tooltip heading="Start the SAM inference server">Start the background Python inference server (sam3_env environment) and preload the selected model. SAM2.1-tiny / RITM take a few seconds up to ~20 s.</tooltip>
+        </button>
+        <button id="SAM3Interactive_StopServerButton" caption="Stop Server" className="StopServerButton" loadOnClick="true" smallImage="GenericButtonRed16" largeImage="GenericButtonRed32">
+          <tooltip heading="Stop the SAM inference server">Stop the background inference server and free the GPU memory.</tooltip>
+        </button>
+        <button id="SAM3Interactive_OpenConfigButton" caption="Settings" className="OpenConfigButton" loadOnClick="true" smallImage="GenericButtonGray16" largeImage="GenericButtonGray32">
+          <tooltip heading="Advanced Settings">Open the configuration file (Python path, port, image size limit, ...). Pick the model with the 'Model' drop-down instead of editing the file.</tooltip>
+        </button>
+        <comboBox id="SAM3Interactive_RasterCombo" caption="Imagery:" className="RasterLayerComboBox" itemWidth="150" isEditable="false" isReadOnly="true" resizable="true">
+          <tooltip heading="Imagery Layer">The raster imagery layer to segment. Opening the drop-down refreshes the list.</tooltip>
+        </comboBox>
+        <comboBox id="SAM3Interactive_TargetCombo" caption="Target:" className="TargetLayerComboBox" itemWidth="150" isEditable="false" isReadOnly="true" resizable="true">
+          <tooltip heading="Target Polygon Layer">Polygons confirmed with Space (or the panel 'Save' button) are written to this layer.</tooltip>
+        </comboBox>
+        <comboBox id="SAM3Interactive_ModelCombo" caption="Model:" className="ModelComboBox" itemWidth="180" isEditable="false" isReadOnly="true" resizable="true">
+          <tooltip heading="Inference Model">Switch the segmentation model; the choice is saved automatically: SAM2.1 Tiny (default, fast), SAM2.1 Small (more accurate), SAM3 (heaviest, needs a Hugging Face login), RITM (TagLab coral-finetuned, fast on CPU). Takes effect with the next work area.</tooltip>
+        </comboBox>
+      </controls>
+      <embeddableControls>
+        <embeddableControl id="SAM3Interactive_SegmentOverlay" className="SegmentOverlayViewModel">
+          <content className="SegmentOverlayView" />
+        </embeddableControl>
+      </embeddableControls>
+    </insertModule>
+  </modules>
+</ArcGIS>

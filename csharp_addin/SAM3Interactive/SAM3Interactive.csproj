@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>SAM3Interactive</RootNamespace>
+    <AssemblyName>SAM3Interactive</AssemblyName>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <NoWarn>CA1416</NoWarn>
+    <Version>2.5.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ArcGIS Pro SDK. Match the major.minor to your ArcGIS Pro
+         version (3.6.x for Pro 3.6). If restore fails, list versions:
+         dotnet package search Esri.ArcGISPro.Extensions30 -->
+    <PackageReference Include="Esri.ArcGISPro.Extensions30" Version="3.6.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Config.daml" />
+    <Content Include="Config.daml" />
+    <None Remove="Images\AddinDesktop32.png" />
+    <Content Include="Images\AddinDesktop32.png" />
+  </ItemGroup>
+
+</Project>
