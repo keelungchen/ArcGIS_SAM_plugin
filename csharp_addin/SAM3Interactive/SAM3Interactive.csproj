@@ -13,7 +13,7 @@
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <NoWarn>CA1416</NoWarn>
-    <Version>2.5.0</Version>
+    <Version>2.6.1</Version>
   </PropertyGroup>
 
   <ItemGroup>

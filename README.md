@@ -65,10 +65,16 @@ reference, and resample the exported raster to
 - **Model drop-down in the ribbon** — switch between SAM 2.1 Tiny,
   SAM 2.1 Small, SAM 3 and RITM without editing any config file. The
   choice is persisted automatically.
+- **Attribute label drop-downs** — pick a field of the target layer and
+  one of its **domain values** (or a subtype); every polygon you save is
+  tagged with it, so you label while you segment instead of filling the
+  attribute table afterwards. Fields without a domain are flagged and
+  accept a typed value.
 - **Frozen work area** — the extent is captured at the first click and
   its embedding is cached, so subsequent clicks are near-instant.
-- **On-map overlay panel** — shows the active model, click counts,
-  confidence score and status, with Save / Clear clicks / Reset area buttons.
+- **On-map overlay panel** — shows the active model, the active label,
+  click counts, confidence score and status, with Save / Clear clicks /
+  Reset area buttons.
 - **Keyboard**: `Space` = commit polygon, `Ctrl+Z` = undo last click,
   `Esc` = clear all clicks (work area stays).
 - **Background warm-up** — arcpy and the model preload while you set up
@@ -321,9 +327,12 @@ After installing, if you want SAM 3, do the Hugging Face login from
 1. Start ArcGIS Pro and open the **SAM Segmentation** ribbon tab.
 2. Pick your **Imagery** layer and your **Target** polygon layer from
    the ribbon drop-downs, and choose a **Model**.
-3. Click **Start Server** (a progress dialog appears while arcpy and the
+3. *(Optional)* In the **Attribute Label** group, pick a **Label field**
+   of the target layer and then a **Label** value — every polygon you
+   save afterwards is tagged with it. See 8.1 below.
+4. Click **Start Server** (a progress dialog appears while arcpy and the
    model preload). Wait for the status to go green.
-4. Click the **Segment** tool, then click on the map:
+5. Click the **Segment** tool, then click on the map:
 
    | Action | Effect |
    |---|---|
@@ -333,11 +342,12 @@ After installing, if you want SAM 3, do the Hugging Face login from
    | **Ctrl+Z** | Undo the last click |
    | **Esc** | Clear all clicks; the work area stays |
 
-5. The **work area** is frozen from the map view at your first click.
+6. The **work area** is frozen from the map view at your first click.
    Use the ribbon's **New Work Area** / **Cancel Work Area** buttons to
    move it or drop it.
-6. The on-map overlay shows the model, click counts, confidence score
-   and status, plus Save / Clear clicks / Reset area buttons.
+7. The on-map overlay shows the model, the active label, click counts,
+   confidence score and status, plus Save / Clear clicks / Reset area
+   buttons.
 
 **Tips**
 
@@ -351,6 +361,41 @@ After installing, if you want SAM 3, do the Hugging Face login from
   next click.
 - For coral / benthic imagery, the **RITM** engine often beats SAM out
   of the box, and runs comfortably on CPU.
+- Segment one class at a time: set the **Label** once, work through all
+  objects of that class, then switch the label — much faster than
+  editing attributes afterwards.
+
+### 8.1 Labelling polygons while you segment
+
+The **Attribute Label** ribbon group writes an attribute value into every
+polygon as it is created, so you never have to open the Attributes pane
+between objects:
+
+| Drop-down | What it does |
+|---|---|
+| **Label field** | Field of the **Target** layer that carries the label. Opening the list reads the fields of the current target layer. |
+| **Label** | Value written into that field for every polygon saved from now on. Switch it any time to tag the next objects differently. |
+
+Each field is marked with where its values come from:
+
+| Marker | Meaning | How you pick a value |
+|---|---|---|
+| `[domain: n values]` | Coded value domain on the field | Pick a description from the **Label** list; the **code** is stored |
+| `[subtypes: n]` | The layer's subtype field | Pick a subtype name; its code is stored |
+| `[range domain]` | Range domain (min/max only) | Type the value into **Label** and press Enter |
+| `[no domain]` | No domain at all | Type the value into **Label** and press Enter |
+
+Picking a field without a coded value domain shows a notification saying
+so (bell icon, top right) — attach a coded value domain in the
+geodatabase (*Fields view → Domain*) if you want a fixed list to choose
+from.
+
+Choose `(no value)` to stop tagging, or `(no label)` in the field
+drop-down to switch labelling off entirely. Changing the **Target**
+layer clears both drop-downs, since fields and domains belong to the
+layer. The active label is shown in green in the on-map panel, and each
+save is confirmed with e.g. `Polygon saved and selected (score 0.94,
+Class = Acropora).`
 
 ---
 
@@ -471,6 +516,8 @@ docs/
 | Server will not start | Wrong paths in `config.json` | Re-run `scripts\install_addin_config.bat`; check `%LOCALAPPDATA%\SAM3Interactive\server.log` |
 | Port already in use | Something else owns 8765 | Edit `"port"` in `config.json`, or re-run the one-click installer to auto-pick a free port |
 | "Zoom in" error at first click | Work area exceeds `MAX_WORKAREA_NATIVE_PX` | Zoom in, or raise the limit in `sam3_tools/config.py` |
+| SAM ribbon present but **every control greyed out / drop-downs will not open** | The add-in was re-installed **while Pro was running**, so Pro's `AssemblyCache` kept the old locked DLL next to the new `Config.daml` and the assembly fails to load | Close Pro, then `Remove-Item "$env:LOCALAPPDATA\ESRI\ArcGISPro\AssemblyCache\{8f3b0f0a-9c1e-4f5d-b1a2-6d9d1e7c4a55}" -Recurse -Force` and restart Pro. Since 2.6.1 `build_addin.ps1 -Install` clears this cache automatically and warns when Pro is running |
+| **"The requested extent does not overlap the input raster"** | The **Imagery** layer is not the raster under the current view (common with several sites in one project) | Open the **Imagery** drop-down and pick the layer marked `[in view]`; since 2.6.1 the add-in names the right layer in the message instead of failing in the server |
 | RITM checkpoint not found | `models\ritm_corals.pth` missing | Run `scripts\get_ritm.bat` |
 | Toolbox tools greyed out | Pro is not using `sam3_env` | Project → Package Manager → switch the active environment, restart Pro |
 | Very slow inference | Running on CPU | Check `check_install.py` for `CUDA available`; or switch to the RITM engine |
@@ -498,6 +545,30 @@ The full troubleshooting chapter (Traditional Chinese) lives in
 ---
 
 ## 14. Changelog
+
+### 2.6.1 — 2026-08-02
+Imagery selection fixes for projects holding several sites. The add-in
+now verifies that the map view overlaps the chosen **Imagery** layer
+*before* calling the server, and names the layer the view is actually
+over instead of failing with the server's
+`The requested extent does not overlap the input raster`. Rasters
+covering the current view are marked `[in view]` in the drop-down, and
+an imagery pick that cannot be resolved in the active map (picked in
+another map, or the layer was removed) no longer silently falls back to
+the first raster in the map — the raster under the view is used instead.
+The **Imagery** / **Target** drop-downs also keep showing their
+selection after the list refreshes.
+
+### 2.6.0 — 2026-08-02
+**Attribute Label** ribbon group for the add-in: pick a **Label field**
+of the target polygon layer and a **Label** value, and every polygon
+saved with `Space` is created with that attribute already set. Values
+come from the field's coded value domain or from the layer subtypes;
+fields are marked `[domain: n values]` / `[subtypes: n]` /
+`[range domain]` / `[no domain]` in the list, picking a field without a
+domain raises a notification and falls back to a typed value (validated
+against the field type). The label is shown in the on-map panel and
+cleared when the target layer changes. See [8.1](#81-labelling-polygons-while-you-segment).
 
 ### 2.2.0 — 2026-07-05
 UI overhaul: Chinese ribbon (`SAM 分割` tab), **model drop-down**

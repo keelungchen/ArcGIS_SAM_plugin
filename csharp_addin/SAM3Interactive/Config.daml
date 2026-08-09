@@ -1,5 +1,5 @@
 <ArcGIS defaultAssembly="SAM3Interactive.dll" defaultNamespace="SAM3Interactive" xmlns="http://schemas.esri.com/DADF/Registry" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schemas.esri.com/DADF/Registry file:///C:/Program%20Files/ArcGIS/Pro/bin/ArcGIS.Desktop.Framework.xsd">
-  <AddInInfo id="{8f3b0f0a-9c1e-4f5d-b1a2-6d9d1e7c4a55}" version="2.5.0" desktopVersion="3.6">
+  <AddInInfo id="{8f3b0f0a-9c1e-4f5d-b1a2-6d9d1e7c4a55}" version="2.6.1" desktopVersion="3.6">
     <Name>SAM Interactive Segmentation</Name>
     <Description>TagLab-style real-time positive/negative click segmentation (SAM2.1 / SAM3 / RITM). Left-click = positive, right-click = negative, Space = save polygon.</Description>
     <Image>Images\AddinDesktop32.png</Image>
@@ -13,6 +13,7 @@
       <tabs>
         <tab id="SAM3Interactive_Tab" caption="SAM Segmentation">
           <group refID="SAM3Interactive_LayersGroup" />
+          <group refID="SAM3Interactive_LabelGroup" />
           <group refID="SAM3Interactive_ToolGroup" />
           <group refID="SAM3Interactive_WorkAreaGroup" />
           <group refID="SAM3Interactive_ServerGroup" />
@@ -23,6 +24,10 @@
           <comboBox refID="SAM3Interactive_RasterCombo" />
           <comboBox refID="SAM3Interactive_TargetCombo" />
           <comboBox refID="SAM3Interactive_ModelCombo" />
+        </group>
+        <group id="SAM3Interactive_LabelGroup" caption="Attribute Label" appearsOnAddInTab="false">
+          <comboBox refID="SAM3Interactive_LabelFieldCombo" />
+          <comboBox refID="SAM3Interactive_LabelValueCombo" />
         </group>
         <group id="SAM3Interactive_ToolGroup" caption="Interactive Segmentation" appearsOnAddInTab="false">
           <tool refID="SAM3Interactive_SegmentTool" size="large" />
@@ -73,6 +78,18 @@
         </comboBox>
         <comboBox id="SAM3Interactive_TargetCombo" caption="Target:" className="TargetLayerComboBox" itemWidth="150" isEditable="false" isReadOnly="true" resizable="true">
           <tooltip heading="Target Polygon Layer">Polygons confirmed with Space (or the panel 'Save' button) are written to this layer.</tooltip>
+        </comboBox>
+        <comboBox id="SAM3Interactive_LabelFieldCombo" caption="Label field:" className="LabelFieldComboBox" itemWidth="170" isEditable="false" isReadOnly="true" resizable="true">
+          <tooltip heading="Label Field">
+            Field of the target polygon layer that every new polygon is tagged in. Opening the drop-down reads the fields of the current target layer.
+            Fields are marked with where their values come from: [domain: n values] = coded value domain, [subtypes: n] = subtype field, [range domain] / [no domain] = no value list, so the label is typed into the 'Label' box instead.
+          </tooltip>
+        </comboBox>
+        <comboBox id="SAM3Interactive_LabelValueCombo" caption="Label:" className="LabelValueComboBox" itemWidth="170" isEditable="true" isReadOnly="false" resizable="true">
+          <tooltip heading="Label Value">
+            Value written into the label field of every polygon saved with Space (or the panel 'Save' button) - switch it any time to tag the next polygons differently.
+            Fields with a coded value domain (or subtypes) list their values; for a field without a domain, type the value and press Enter. Pick '(no value)' to stop tagging.
+          </tooltip>
         </comboBox>
         <comboBox id="SAM3Interactive_ModelCombo" caption="Model:" className="ModelComboBox" itemWidth="180" isEditable="false" isReadOnly="true" resizable="true">
           <tooltip heading="Inference Model">Switch the segmentation model; the choice is saved automatically: SAM2.1 Tiny (default, fast), SAM2.1 Small (more accurate), SAM3 (heaviest, needs a Hugging Face login), RITM (TagLab coral-finetuned, fast on CPU). Takes effect with the next work area.</tooltip>

@@ -11,6 +11,9 @@
                  FontSize="14" Foreground="White"/>
       <TextBlock Text="{Binding ModelText}" Foreground="#FF9CC8FF"
                  FontSize="12" Margin="0,2,0,0"/>
+      <TextBlock Text="{Binding LabelText}" Foreground="#FFA8E6A1"
+                 FontSize="12" TextWrapping="Wrap" MaxWidth="250"
+                 Margin="0,2,0,0"/>
       <TextBlock Text="{Binding ClicksText}" Foreground="White"
                  FontSize="12" Margin="0,4,0,0"/>
       <TextBlock Text="{Binding StatusText}" Foreground="#FFFFD080"

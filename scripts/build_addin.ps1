@@ -85,6 +85,33 @@ Write-Host "       $package"
 
 # --- optional: register with ArcGIS Pro -------------------------------
 if ($Install) {
+    # ArcGIS Pro extracts the add-in into its own AssemblyCache and keeps
+    # the DLL locked while it runs. Registering a new build over a running
+    # Pro therefore updates Config.daml but leaves the OLD assembly in the
+    # cache - the ribbon tab then appears with every control dead (greyed
+    # buttons, empty drop-downs) because the assembly never loads.
+    $addInId = "{8f3b0f0a-9c1e-4f5d-b1a2-6d9d1e7c4a55}"
+    $damlText = Get-Content (Join-Path $projDir "Config.daml") -Raw
+    if ($damlText -match 'AddInInfo\s+id="(\{[^"]+\})"') {
+        $addInId = $Matches[1]
+    }
+    $cache = Join-Path $env:LOCALAPPDATA "ESRI\ArcGISPro\AssemblyCache\$addInId"
+
+    if (Get-Process -Name ArcGISPro -ErrorAction SilentlyContinue) {
+        Write-Host ""
+        Write-Host "[WARN] ArcGIS Pro is RUNNING. The package is registered below, but"
+        Write-Host "       Pro keeps the previous add-in assembly locked in its cache."
+        Write-Host "       Close ArcGIS Pro and re-run this script (or delete the folder"
+        Write-Host "       below) before starting Pro again, otherwise the SAM ribbon"
+        Write-Host "       loads with every control greyed out:"
+        Write-Host "       $cache"
+        Write-Host ""
+    }
+    elseif (Test-Path $cache) {
+        Remove-Item $cache -Recurse -Force
+        Write-Host "Cleared Pro's stale add-in assembly cache."
+    }
+
     $candidates = @(
         (Join-Path $env:LOCALAPPDATA "ArcGIS\shared\bin\RegisterAddIn.exe"),
         "C:\Program Files\Common Files\ArcGIS\shared\bin\RegisterAddIn.exe",
