@@ -61,9 +61,11 @@ namespace SAM3Interactive
             // first click comes back fast. The much heavier SAM
             // weights are only loaded once SAM is picked in the
             // ribbon. Without the RITM weights, fall back to SAM.
-            _engine = string.IsNullOrWhiteSpace(cfg.Engine)
-                ? (cfg.HasRitmCheckpoint() ? "ritm" : "sam")
-                : cfg.Engine;
+            _engine = cfg.RitmOnly
+                ? "ritm"
+                : string.IsNullOrWhiteSpace(cfg.Engine)
+                    ? (cfg.HasRitmCheckpoint() ? "ritm" : "sam")
+                    : cfg.Engine;
             _modelId = string.IsNullOrWhiteSpace(cfg.ModelId)
                 ? "facebook/sam2.1-hiera-tiny" : cfg.ModelId;
         }

@@ -42,6 +42,14 @@ namespace SAM3Interactive
         [JsonPropertyName("auto_start_server")]
         public bool AutoStartServer { get; set; } = true;
 
+        /// <summary>RITM-only installation: the SAM dependencies
+        /// (transformers / accelerate / huggingface_hub) were not
+        /// installed, so the SAM entries are hidden from the ribbon
+        /// drop-down instead of failing at the first click. Written by
+        /// INSTALL_RITM_ONLY.bat.</summary>
+        [JsonPropertyName("ritm_only")]
+        public bool RitmOnly { get; set; }
+
         public static string ConfigDir => Path.Combine(
             Environment.GetFolderPath(
                 Environment.SpecialFolder.LocalApplicationData),

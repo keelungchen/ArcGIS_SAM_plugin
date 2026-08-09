@@ -172,6 +172,10 @@
 完整記錄在 <code>install.log</code>；修正後再雙擊一次即可（已完成的步驟會自動跳過）。
 進階選項：<code>INSTALL.bat -Recreate</code>（重建環境）、<code>INSTALL.bat -CpuOnly</code>（強制 CPU 版 PyTorch）。
 安裝包內含 RITM 珊瑚模型權重，目標電腦不需要另外下載。<br>
+<strong>純 RITM 版</strong>：只用 Click Segment ＋ RITM 的話，改雙擊 <strong><code>INSTALL_RITM_ONLY.bat</code></strong>（或使用
+<code>ArcGIS_SAM_plugin_RITM_Setup.zip</code>，以 <code>scripts\make_package.ps1 -RitmOnly</code> 產生）。它會<strong>略過</strong>
+<code>transformers</code>／<code>accelerate</code>／<code>huggingface_hub</code> 與 SAM 地理處理工具箱，功能區下拉選單也只會列出 RITM。
+步驟數一樣、最花時間的兩步（複製 conda 環境、安裝 PyTorch）也不變，省下的是幾百 MB 下載量、Hugging Face 帳號，以及 <code>transformers</code> 版本衝突這類安裝失敗。<br>
 以下各節是<strong>手動安裝</strong>的等效步驟，一鍵安裝成功的話可以直接跳到第 5.3 節。</div>
 
 <h3>步驟 1：建立 Python 環境（一鍵腳本）</h3>

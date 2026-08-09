@@ -232,6 +232,36 @@ INSTALL.bat -CpuOnly    :: 強制安裝 CPU 版 PyTorch
 安裝完成後，若要使用 SAM 3，請依
 [3.1 節](#31-hugging-face-存取權杖僅-facebooksam3-需要)完成 Hugging Face 登入。
 
+### 純 RITM 版（RITM-only）
+
+如果你只用互動式 Click Segment 搭配 RITM（珊瑚／底棲製圖的常見情況），
+可以改裝精簡版：雙擊 **`INSTALL_RITM_ONLY.bat`**，或打包一份只含 RITM
+的安裝檔：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\make_package.ps1 -RitmOnly
+```
+
+會產生 `dist_package\ArcGIS_SAM_plugin_RITM_Setup.zip`，裡面唯一的進入點
+就是 `INSTALL_RITM_ONLY.bat`。
+
+| | 完整版 | 純 RITM 版 |
+|---|---|---|
+| `sam3_env` conda 複製 | 有 | 有 |
+| PyTorch（CUDA 版約 3 GB） | 有 | 有 |
+| `transformers`、`accelerate`、`huggingface_hub` | 有 | **無** |
+| 首次使用時下載 SAM 權重 | 155 MB 起 | **完全不用** |
+| Hugging Face 帳號／授權 | 只有 SAM 3 需要 | **永遠不需要** |
+| `SAM3_Toolbox.pyt` 地理處理工具 | 有 | **無**（五個工具全部走 SAM） |
+| Click Segment 增益集（RITM） | 有 | 有 |
+
+**步驟數其實一樣**（都是雙擊一個 bat），而且最花時間的兩步（複製 conda
+環境、安裝 PyTorch）完全不變，所以不會快很多。真正省下的是：少下載幾百
+MB、不需要 Hugging Face 帳號、不會遇到 `transformers` 版本衝突（常見的
+安裝失敗原因），以及功能區下拉選單只會列出 RITM，不會出現選了就報錯的
+SAM 選項。安裝時會在 `config.json` 記錄 `"ritm_only": true`；把它改成
+`false`（並補裝 SAM 套件）就能把 SAM 選項找回來。
+
 ---
 
 ## 6. 安裝方式二：手動安裝
@@ -412,6 +442,7 @@ powershell -ExecutionPolicy Bypass -File scripts\make_package.ps1
 ```
 SAM3_Toolbox.pyt              工具箱進入點（把這個加進 ArcGIS Pro）
 INSTALL.bat                   一鍵安裝進入點
+INSTALL_RITM_ONLY.bat         同上，精簡版（只裝 RITM 引擎）
 sam3_tools/                   Python 核心套件（必須與 .pyt 放在一起）
   config.py                   預設值：模型 id、門檻值、影像尺寸
   engine.py                   SAM 2/3 推論 + InteractiveSession（embedding 快取）

@@ -19,11 +19,16 @@
 #
 #  Options:  -Recreate   delete + rebuild sam3_env from scratch
 #            -CpuOnly    force CPU-only PyTorch
+#            -RitmOnly   install the RITM click engine only: skips the
+#                        SAM packages (transformers / accelerate /
+#                        huggingface_hub) and the SAM geoprocessing
+#                        toolbox. The add-in then offers RITM only.
 # ============================================================
 
 param(
     [switch]$Recreate,
-    [switch]$CpuOnly
+    [switch]$CpuOnly,
+    [switch]$RitmOnly
 )
 
 $ErrorActionPreference = 'Continue'
@@ -68,7 +73,10 @@ function Finish($code) {
         Write-Host "   2. The 'SAM Segmentation' ribbon tab should appear."
         Write-Host "      (If not: Settings > Add-In Manager and check that"
         Write-Host "      SAM Interactive Segmentation is listed.)"
-        Write-Host "   3. Click 'Start Server' once to warm up the model."
+        Write-Host "   3. Nothing else to do: the inference server starts"
+        Write-Host "      itself ~10 s after Pro launches and warms the"
+        Write-Host "      model in the background ('Start Server' on the"
+        Write-Host "      ribbon triggers it manually if you want)."
         Write-Host "   4. Manual: docs\User_Manual.html (in the install"
         Write-Host "      folder: $AppDir)"
     } else {
@@ -98,6 +106,9 @@ function Finish($code) {
 Info "ArcGIS SAM plugin installer"
 Info "Package folder : $PackageRoot"
 Info "Install target : $AppDir"
+if ($RitmOnly) {
+    Info "Edition        : RITM only (no SAM packages, no SAM toolbox)"
+}
 
 # ------------------------------------------------------------
 Step "Step 1/9 : Locate ArcGIS Pro"
@@ -233,13 +244,24 @@ if ($LASTEXITCODE -eq 0) {
 # ------------------------------------------------------------
 Step "Step 5/9 : Python packages"
 # ------------------------------------------------------------
-& $EnvPy -m pip install --upgrade "transformers>=4.57" accelerate huggingface_hub pillow scikit-image opencv-python easydict
+if ($RitmOnly) {
+    # RITM needs torch + opencv + easydict only; transformers,
+    # accelerate and huggingface_hub are for the SAM engine.
+    Info "RITM-only edition: skipping transformers / accelerate / huggingface_hub."
+    & $EnvPy -m pip install --upgrade pillow scikit-image opencv-python easydict
+} else {
+    & $EnvPy -m pip install --upgrade "transformers>=4.57" accelerate huggingface_hub pillow scikit-image opencv-python easydict
+}
 if ($LASTEXITCODE -ne 0) {
     Problem -Fatal `
         "pip failed to install the required packages." `
-        "Check the internet connection and re-run INSTALL.bat. Details are in $LogPath."
+        "Check the internet connection and re-run the installer. Details are in $LogPath."
 }
-Ok "Packages installed (transformers, scikit-image, opencv, ...)."
+if ($RitmOnly) {
+    Ok "Packages installed (scikit-image, opencv, easydict)."
+} else {
+    Ok "Packages installed (transformers, scikit-image, opencv, ...)."
+}
 
 # ------------------------------------------------------------
 Step "Step 6/9 : Copy runtime files"
@@ -269,12 +291,18 @@ CopyTree 'python_server' -Mirror
 CopyTree 'sam3_tools' -Mirror
 CopyTree 'models'
 CopyTree 'docs'
-foreach ($f in @('SAM3_Toolbox.pyt', 'README.md')) {
+# The geoprocessing toolbox runs every tool through the SAM engine, so
+# it is left out of the RITM-only edition (it would need transformers).
+$files = if ($RitmOnly) { @('README.md') }
+         else { @('SAM3_Toolbox.pyt', 'README.md') }
+foreach ($f in $files) {
     $src = Join-Path $PackageRoot $f
     if (Test-Path $src) { Copy-Item $src $AppDir -Force }
 }
-Get-ChildItem (Join-Path $PackageRoot '*.pyt.xml') -ErrorAction SilentlyContinue |
-    ForEach-Object { Copy-Item $_.FullName $AppDir -Force }
+if (-not $RitmOnly) {
+    Get-ChildItem (Join-Path $PackageRoot '*.pyt.xml') -ErrorAction SilentlyContinue |
+        ForEach-Object { Copy-Item $_.FullName $AppDir -Force }
+}
 $LASTEXITCODE = 0
 
 # ------------------------------------------------------------
@@ -299,6 +327,11 @@ if (Test-Path $cfgPath) {
 # RITM is the default engine (small, CPU-friendly, no embedding pass,
 # so the first click is fast). Without its weights, fall back to SAM.
 $ritmCkpt = Join-Path $AppDir 'models\ritm_corals.pth'
+if ($RitmOnly -and -not (Test-Path $ritmCkpt)) {
+    Problem -Fatal `
+        "This is the RITM-only edition, but the RITM weights are missing: $ritmCkpt" `
+        "The package is incomplete - re-create it with 'scripts\make_package.ps1 -RitmOnly' (models\ritm_corals.pth must be present), or download the weights from http://taglab.isti.cnr.it/models/ritm_corals.pth into the package's models\ folder and run the installer again."
+}
 if (Test-Path $ritmCkpt) { $engine = 'ritm' } else { $engine = 'sam' }
 $cfg = [ordered]@{
     python_exe        = $EnvPy
@@ -309,6 +342,7 @@ $cfg = [ordered]@{
     ritm_checkpoint   = $ritmCkpt
     max_image_size    = 2048
     auto_start_server = $true
+    ritm_only         = [bool]$RitmOnly
 }
 $cfg | ConvertTo-Json | Set-Content -Encoding utf8 $cfgPath
 Ok "Configuration written: $cfgPath"
@@ -348,6 +382,7 @@ $checkPy = Join-Path $env:TEMP 'sam3_install_check.py'
 @'
 import sys
 app_dir = sys.argv[1]
+want_sam = len(sys.argv) < 3 or sys.argv[2] != "ritm-only"
 sys.path.insert(0, app_dir)                      # sam3_tools
 sys.path.insert(0, app_dir + "\\python_server")  # isegm
 errors = 0
@@ -373,12 +408,17 @@ def _tf():
     import transformers
     if not hasattr(transformers, "Sam2Model"):
         raise RuntimeError("transformers too old - Sam2Model missing")
-check("transformers + SAM2 classes", _tf)
+if want_sam:
+    check("transformers + SAM2 classes", _tf)
+else:
+    print("[SKIP] transformers (RITM-only edition)")
+check("cv2 (RITM)", lambda: __import__("cv2"))
 check("isegm (RITM engine)", lambda: __import__("isegm"))
 sys.exit(errors)
 '@ | Set-Content -Encoding ascii $checkPy
 
-& $EnvPy $checkPy $AppDir
+$checkMode = if ($RitmOnly) { 'ritm-only' } else { 'full' }
+& $EnvPy $checkPy $AppDir $checkMode
 if ($LASTEXITCODE -ne 0) {
     Problem `
         "The python environment validation reported failures (see the [FAIL] lines above)." `

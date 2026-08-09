@@ -244,6 +244,40 @@ INSTALL.bat -CpuOnly    :: force CPU-only PyTorch
 After installing, if you want SAM 3, do the Hugging Face login from
 [section 3.1](#31-hugging-face-access-token-only-needed-for-facebooksam3).
 
+### RITM-only edition
+
+If you only ever use the interactive Click Segment tool with RITM (the
+usual case for coral / benthic mapping), install the slim edition
+instead — double-click **`INSTALL_RITM_ONLY.bat`**, or build a package
+that contains nothing else:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\make_package.ps1 -RitmOnly
+```
+
+That produces `dist_package\ArcGIS_SAM_plugin_RITM_Setup.zip`, whose
+only entry point is `INSTALL_RITM_ONLY.bat`.
+
+| | Full | RITM-only |
+|---|---|---|
+| `sam3_env` conda clone | yes | yes |
+| PyTorch (~3 GB with CUDA) | yes | yes |
+| `transformers`, `accelerate`, `huggingface_hub` | yes | **no** |
+| SAM weights downloaded on first use | ~155 MB+ | **none** |
+| Hugging Face account / licence | only for SAM 3 | **never** |
+| `SAM3_Toolbox.pyt` geoprocessing tools | yes | **no** (all five run on SAM) |
+| Click Segment add-in with RITM | yes | yes |
+
+The number of steps is identical — one double-click either way — and the
+two slowest steps (cloning the conda environment and installing PyTorch)
+are unchanged, so this is not a dramatically faster install. What it
+does buy you: a few hundred MB less to download, no Hugging Face
+account, no `transformers` version conflicts (a common failure), and a
+ribbon drop-down that only offers RITM instead of SAM entries that would
+error out. The installer records this as `"ritm_only": true` in
+`config.json`; flip it to `false` (and install the SAM packages) to get
+the SAM entries back.
+
 ---
 
 ## 6. Installation — manual
@@ -432,6 +466,7 @@ Output: `dist_package\ArcGIS_SAM_plugin_Setup.zip`.
 ```
 SAM3_Toolbox.pyt              Toolbox entry point (add this to ArcGIS Pro)
 INSTALL.bat                   One-click installer entry point
+INSTALL_RITM_ONLY.bat         Same, slim edition (RITM engine only)
 sam3_tools/                   Core Python package (must stay next to the .pyt)
   config.py                   Defaults: model ids, thresholds, image size
   engine.py                   SAM 2/3 inference + InteractiveSession (embedding cache)
