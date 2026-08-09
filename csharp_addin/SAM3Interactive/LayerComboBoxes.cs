@@ -28,17 +28,34 @@ namespace SAM3Interactive
 
         private async Task FillAsync()
         {
-            var map = MapView.Active?.Map;
-            if (map == null)
+            var mapView = MapView.Active;
+            if (mapView?.Map == null)
                 return;
+            // Mark the rasters that actually cover the current view: a
+            // project with several sites otherwise makes it easy to pick
+            // imagery the view does not overlap.
             var items = await QueuedTask.Run(() =>
-                map.GetLayersAsFlattenedList()
+            {
+                var view = mapView.Extent;
+                var sr = mapView.Map.SpatialReference;
+                return mapView.Map.GetLayersAsFlattenedList()
                    .OfType<RasterLayer>()
-                   .Select(l => new { l.Name, l.URI })
-                   .ToList());
+                   .Select(l => new
+                   {
+                       l.Name,
+                       l.URI,
+                       InView = SamModule.LayerCoversView(l, view, sr),
+                   })
+                   .ToList();
+            });
             Clear();
             foreach (var it in items)
-                Add(new LayerComboItem(it.Name, it.URI));
+                Add(new LayerComboItem(
+                    it.InView ? it.Name + "  [in view]" : it.Name, it.URI));
+            // Refilling drops the displayed selection: restore it so the
+            // ribbon keeps showing the layer that is actually in use.
+            SelectedItem = ItemCollection.OfType<LayerComboItem>()
+                .FirstOrDefault(i => i.LayerUri == SamModule.RasterLayerUri);
         }
 
         protected override void OnSelectionChange(ComboBoxItem item)
@@ -71,10 +88,16 @@ namespace SAM3Interactive
             Clear();
             foreach (var it in items)
                 Add(new LayerComboItem(it.Name, it.URI));
+            // Same here - a blank 'Target' box would also look as if the
+            // label drop-downs had lost their layer.
+            SelectedItem = ItemCollection.OfType<LayerComboItem>()
+                .FirstOrDefault(i => i.LayerUri == SamModule.TargetLayerUri);
         }
 
         protected override void OnSelectionChange(ComboBoxItem item)
         {
+            // Re-selecting the same layer is a no-op in the setter, so the
+            // label field/value picked for it survive a list refresh.
             SamModule.TargetLayerUri = (item as LayerComboItem)?.LayerUri;
         }
     }

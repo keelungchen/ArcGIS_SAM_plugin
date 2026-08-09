@@ -41,6 +41,13 @@ namespace SAM3Interactive
             set => SetProperty(ref _modelText, value);
         }
 
+        private string _labelText = "";
+        public string LabelText
+        {
+            get => _labelText;
+            set => SetProperty(ref _labelText, value);
+        }
+
         private string _clicksText = "";
         public string ClicksText
         {

@@ -250,6 +250,10 @@ namespace SAM3Interactive
             return "Model: " + name;
         }
 
+        /// <summary>Refresh the on-map panel after ribbon state changed
+        /// (e.g. a new label was picked).</summary>
+        internal void RefreshPanel() => UpdatePanel();
+
         private void UpdatePanel(string statusOverride = null)
         {
             if (_panel == null)
@@ -257,6 +261,7 @@ namespace SAM3Interactive
             var pos = _clicks.Count(c => c.Label == 1);
             var neg = _clicks.Count - pos;
             _panel.ModelText = CurrentModelLabel();
+            _panel.LabelText = SamModule.LabelSummary;
             _panel.ClicksText = string.Format(
                 "Positive {0} | Negative {1}{2}", pos, neg,
                 _previewPolygon != null
@@ -497,7 +502,7 @@ namespace SAM3Interactive
                       "object first.");
                 return;
             }
-            var layer = FindTargetLayer();
+            var layer = SamModule.FindTargetLayer();
             if (layer == null)
             {
                 // No editable polygon layer around: create one in the
@@ -519,17 +524,25 @@ namespace SAM3Interactive
             var score = _lastScore;
             var polygon = _previewPolygon;
             var imageSr = _imageSr;
-            var (ok, message) = await QueuedTask.Run(() =>
+            var labelField = SamModule.LabelFieldName;
+            var labelValue = SamModule.LabelValue;
+            var labelText = SamModule.LabelValueText;
+            var (ok, message, labelWarning) = await QueuedTask.Run(() =>
             {
                 Geometry geom = polygon;
                 var layerSr = layer.GetSpatialReference();
                 if (layerSr != null && !layerSr.IsEqual(imageSr))
                     geom = GeometryEngine.Instance.Project(geom, layerSr);
 
-                var attrs = new Dictionary<string, object>
+                // Case-insensitive: the label field may be the same field
+                // as the auto-filled Score/Prompt but spelled differently,
+                // and two keys for one field confuse EditOperation.
+                var attrs = new Dictionary<string, object>(
+                    StringComparer.OrdinalIgnoreCase)
                 {
                     { "SHAPE", geom },
                 };
+                string warning = null;
                 using (var table = layer.GetTable())
                 {
                     var fields = table.GetDefinition().GetFields();
@@ -539,6 +552,27 @@ namespace SAM3Interactive
                     if (fields.Any(f => f.Name.Equals("Prompt",
                             StringComparison.OrdinalIgnoreCase)))
                         attrs["Prompt"] = "click";
+
+                    // Tag the new polygon with the label picked in the
+                    // ribbon (domain value, subtype or typed value).
+                    if (labelField != null && labelValue != null)
+                    {
+                        var target = fields.FirstOrDefault(f =>
+                            f.Name.Equals(labelField,
+                                StringComparison.OrdinalIgnoreCase));
+                        if (target == null)
+                            warning = "Label field '" + labelField +
+                                "' does not exist on the target layer - " +
+                                "the polygon was saved without a label.";
+                        else
+                            attrs[target.Name] = labelValue;
+                    }
+                    else if (labelField != null)
+                    {
+                        warning = "No label value picked - the polygon " +
+                            "was saved without a value in '" +
+                            labelField + "'.";
+                    }
                 }
 
                 // Select the new feature so the Attributes pane and
@@ -551,7 +585,7 @@ namespace SAM3Interactive
                 };
                 op.Create(layer, attrs);
                 var success = op.Execute();
-                return (success, success ? null : op.ErrorMessage);
+                return (success, success ? null : op.ErrorMessage, warning);
             });
 
             if (!ok)
@@ -559,9 +593,14 @@ namespace SAM3Interactive
                 Toast("Could not create the feature: " + message);
                 return;
             }
+            if (labelWarning != null)
+                Toast(labelWarning);
+            var labelInfo = labelValue != null && labelWarning == null
+                ? string.Format(", {0} = {1}", labelField, labelText)
+                : "";
             Toast(string.Format(
-                "Polygon saved and selected (score {0:0.00}).",
-                score));
+                "Polygon saved and selected (score {0:0.00}{1}).",
+                score, labelInfo));
 
             // Keep the frozen work area so nearby objects reuse the
             // cached embedding; only the clicks are cleared.
@@ -603,14 +642,22 @@ namespace SAM3Interactive
             _prepareCts = new CancellationTokenSource();
             try
             {
-                var (rasterPath, extent, mapSrWkt) =
-                    await QueuedTask.Run(() =>
-                    {
-                        var path = GetRasterPath(rasterLayer);
-                        var env = mapView.Extent;
-                        var wkt = mapView.Map.SpatialReference?.Wkt;
-                        return (path, env, wkt);
-                    });
+                var input = await QueuedTask.Run(
+                    () => PrepareWorkArea(mapView, rasterLayer));
+                if (input.Problem != null)
+                {
+                    UpdatePanel("Work area setup failed - see the " +
+                                "error dialog.");
+                    MessageBox.Show(input.Problem,
+                        "SAM Interactive Segmentation");
+                    return false;
+                }
+                if (input.LayerName != rasterLayer.Name)
+                    Toast("Using the imagery under the current view: '" +
+                          input.LayerName + "'.");
+                var rasterPath = input.RasterPath;
+                var extent = input.Extent;
+                var mapSrWkt = input.MapSrWkt;
 
                 var cfg = SamServerManager.Config;
                 var resp = await SamServerClient.SetImageAsync(cfg.Port,
@@ -670,6 +717,79 @@ namespace SAM3Interactive
                 _prepareCts?.Dispose();
                 _prepareCts = null;
             }
+        }
+
+        /// <summary>What the server needs about the imagery, plus a ready
+        /// made message when the view and the imagery do not line up.</summary>
+        private sealed class WorkAreaInput
+        {
+            public string RasterPath;
+            public Envelope Extent;
+            public string MapSrWkt;
+            public string LayerName;
+            public string Problem;   // non-null: abort and show this
+        }
+
+        /// <summary>Collect the server inputs and check that the view
+        /// really covers the imagery. Projects holding several sites
+        /// otherwise fail deep inside the server with "The requested
+        /// extent does not overlap the input raster", which does not say
+        /// which layer is wrong. Must run on the MCT.</summary>
+        private static WorkAreaInput PrepareWorkArea(
+            MapView mapView, RasterLayer rasterLayer)
+        {
+            var map = mapView.Map;
+            var mapSr = map.SpatialReference;
+            var view = mapView.Extent;
+            var input = new WorkAreaInput
+            {
+                Extent = view,
+                MapSrWkt = mapSr?.Wkt,
+                LayerName = rasterLayer.Name,
+            };
+
+            if (!SamModule.LayerCoversView(rasterLayer, view, mapSr))
+            {
+                var covering = map.GetLayersAsFlattenedList()
+                    .OfType<RasterLayer>()
+                    .FirstOrDefault(l => l != rasterLayer &&
+                        SamModule.LayerCoversView(l, view, mapSr));
+                // A pick that cannot be resolved in THIS map (picked in
+                // another map, or the layer was removed) is no pick at
+                // all - then follow the view instead of the first raster.
+                var picked = SamModule.RasterLayerUri != null &&
+                    map.FindLayer(SamModule.RasterLayerUri) is RasterLayer;
+                if (covering != null && !picked)
+                {
+                    rasterLayer = covering;
+                    input.LayerName = covering.Name;
+                }
+                else
+                {
+                    input.Problem = string.Format(
+                        "The current map view does not overlap the " +
+                        "imagery layer '{0}'.\n\n{1}",
+                        rasterLayer.Name,
+                        covering != null
+                            ? "The view is over '" + covering.Name +
+                              "' - pick that layer in the 'Imagery' " +
+                              "drop-down of the SAM ribbon (layers " +
+                              "covering the view are marked [in view])."
+                            : "Zoom to the imagery first: right-click it " +
+                              "in the Contents pane -> Zoom To Layer.");
+                    return input;
+                }
+            }
+
+            try
+            {
+                input.RasterPath = GetRasterPath(rasterLayer);
+            }
+            catch (Exception exc)
+            {
+                input.Problem = exc.Message;
+            }
+            return input;
         }
 
         private async Task<(double col, double row, MapPoint imagePoint)>
@@ -734,27 +854,6 @@ namespace SAM3Interactive
             }
             return map.GetLayersAsFlattenedList()
                 .OfType<RasterLayer>().FirstOrDefault();
-        }
-
-        private static FeatureLayer FindTargetLayer()
-        {
-            var map = MapView.Active?.Map;
-            if (map == null)
-                return null;
-            if (SamModule.TargetLayerUri != null)
-            {
-                var picked = map.FindLayer(SamModule.TargetLayerUri)
-                    as FeatureLayer;
-                if (picked != null)
-                    return picked;
-            }
-            // Fall back to an EDITABLE polygon layer only - writing
-            // into a read-only layer fails and confuses the workflow.
-            return map.GetLayersAsFlattenedList()
-                .OfType<FeatureLayer>()
-                .FirstOrDefault(l =>
-                    l.ShapeType == esriGeometryType.esriGeometryPolygon &&
-                    l.IsEditable);
         }
 
         /// <summary>Create (or reuse) the default polygon target
@@ -880,13 +979,7 @@ namespace SAM3Interactive
             return _negativeSymbol;
         }
 
-        private static void Toast(string message)
-        {
-            FrameworkApplication.AddNotification(new Notification
-            {
-                Title = "SAM3 Interactive",
-                Message = message,
-            });
-        }
+        private static void Toast(string message) =>
+            SamModule.Notify(message);
     }
 }
