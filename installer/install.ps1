@@ -296,14 +296,19 @@ if (Test-Path $cfgPath) {
     Copy-Item $cfgPath "$cfgPath.bak" -Force
     Info "Existing configuration backed up to config.json.bak"
 }
+# RITM is the default engine (small, CPU-friendly, no embedding pass,
+# so the first click is fast). Without its weights, fall back to SAM.
+$ritmCkpt = Join-Path $AppDir 'models\ritm_corals.pth'
+if (Test-Path $ritmCkpt) { $engine = 'ritm' } else { $engine = 'sam' }
 $cfg = [ordered]@{
-    python_exe      = $EnvPy
-    server_script   = (Join-Path $AppDir 'python_server\sam_server.py')
-    port            = $port
-    engine          = 'sam'
-    model_id        = 'facebook/sam2.1-hiera-tiny'
-    ritm_checkpoint = (Join-Path $AppDir 'models\ritm_corals.pth')
-    max_image_size  = 2048
+    python_exe        = $EnvPy
+    server_script     = (Join-Path $AppDir 'python_server\sam_server.py')
+    port              = $port
+    engine            = $engine
+    model_id          = 'facebook/sam2.1-hiera-tiny'
+    ritm_checkpoint   = $ritmCkpt
+    max_image_size    = 2048
+    auto_start_server = $true
 }
 $cfg | ConvertTo-Json | Set-Content -Encoding utf8 $cfgPath
 Ok "Configuration written: $cfgPath"

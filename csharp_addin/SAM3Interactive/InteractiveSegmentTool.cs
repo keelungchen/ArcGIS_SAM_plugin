@@ -88,7 +88,7 @@ namespace SAM3Interactive
         // Tool lifecycle
         // ------------------------------------------------------------
 
-        protected override async Task OnToolActivateAsync(bool active)
+        protected override Task OnToolActivateAsync(bool active)
         {
             IsToolActive = true;
             _panel = OverlayEmbeddableControl as SegmentOverlayViewModel;
@@ -111,28 +111,32 @@ namespace SAM3Interactive
                     UpdatePanel();
                 };
             }
-            UpdatePanel("Starting the server, please wait ...");
+            UpdatePanel();
+            // Activating the tool must feel instant, so the server is
+            // never waited for here - it comes up in the background
+            // (usually it is already warm, see SamModule.Initialize).
+            // The first click joins the same task via SetWorkAreaAsync.
+            _ = EnsureServerInBackgroundAsync();
+            return Task.CompletedTask;
+        }
 
-            var pd = new ProgressDialog("Starting the SAM inference server ...");
-            pd.Show();
-            string error;
-            try
-            {
-                error = await SamServerManager.EnsureRunningAsync();
-            }
-            finally
-            {
-                pd.Hide();
-            }
+        private async Task EnsureServerInBackgroundAsync()
+        {
+            if (SamServerManager.IsReady)
+                return;
+            UpdatePanel("Starting the inference server in the " +
+                        "background - you can already zoom to the " +
+                        "target object.");
+            var error = await SamServerManager.EnsureRunningAsync();
+            if (!IsToolActive)
+                return;
             if (error != null)
-            {
-                UpdatePanel("Server start failed - see the error dialog.");
-                MessageBox.Show(error, "SAM Interactive Segmentation");
-            }
-            else
-            {
+                // No dialog for a background failure: it would pop up
+                // out of nowhere. The first click reports it properly.
+                UpdatePanel("Server start failed - press 'Start " +
+                            "Server' on the ribbon for details.");
+            else if (!_busy && _prepareCts == null)
                 UpdatePanel();
-            }
         }
 
         protected override Task OnToolDeactivateAsync(bool hasMapViewChanged)
@@ -573,6 +577,8 @@ namespace SAM3Interactive
 
         private async Task<bool> SetWorkAreaAsync(MapView mapView)
         {
+            if (!SamServerManager.IsReady)
+                UpdatePanel("Waiting for the inference server ...");
             var error = await SamServerManager.EnsureRunningAsync();
             if (error != null)
             {

@@ -19,10 +19,12 @@ namespace SAM3Interactive
         [JsonPropertyName("port")]
         public int Port { get; set; } = 8765;
 
-        /// <summary>"sam" (SAM2/SAM3 via Hugging Face) or "ritm"
-        /// (TagLab's RITM network, run scripts\get_ritm.bat first).</summary>
+        /// <summary>"ritm" (TagLab's RITM network) or "sam" (SAM2/SAM3
+        /// via Hugging Face). Empty = decide automatically: RITM when
+        /// its checkpoint is there, otherwise SAM (see
+        /// SamModule.LoadModelSelection).</summary>
         [JsonPropertyName("engine")]
-        public string Engine { get; set; } = "sam";
+        public string Engine { get; set; } = "";
 
         [JsonPropertyName("model_id")]
         public string ModelId { get; set; } = "facebook/sam2.1-hiera-tiny";
@@ -32,6 +34,13 @@ namespace SAM3Interactive
 
         [JsonPropertyName("max_image_size")]
         public int MaxImageSize { get; set; } = 2048;
+
+        /// <summary>Start the Python server shortly after ArcGIS Pro
+        /// launches so the Click Segment tool never has to wait for it.
+        /// Set to false to only start it on demand (or manually with
+        /// the ribbon's 'Start Server' button).</summary>
+        [JsonPropertyName("auto_start_server")]
+        public bool AutoStartServer { get; set; } = true;
 
         public static string ConfigDir => Path.Combine(
             Environment.GetFolderPath(
@@ -73,6 +82,30 @@ namespace SAM3Interactive
             Directory.CreateDirectory(ConfigDir);
             File.WriteAllText(ConfigPath, JsonSerializer.Serialize(
                 this, new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        /// <summary>Configured RITM checkpoint, or the repository
+        /// default (models\ritm_corals.pth next to the server
+        /// script). Empty when the path cannot be derived.</summary>
+        public string ResolveRitmCheckpoint()
+        {
+            if (!string.IsNullOrWhiteSpace(RitmCheckpoint))
+                return RitmCheckpoint;
+            if (string.IsNullOrWhiteSpace(ServerScript))
+                return "";
+            var repoDir = Path.GetDirectoryName(
+                Path.GetDirectoryName(ServerScript));
+            return repoDir == null
+                ? ""
+                : Path.Combine(repoDir, "models", "ritm_corals.pth");
+        }
+
+        /// <summary>True when the RITM weights are installed, i.e. RITM
+        /// can serve as the default engine.</summary>
+        public bool HasRitmCheckpoint()
+        {
+            var path = ResolveRitmCheckpoint();
+            return !string.IsNullOrWhiteSpace(path) && File.Exists(path);
         }
 
         /// <summary>Null when valid, otherwise a user-facing reason.</summary>

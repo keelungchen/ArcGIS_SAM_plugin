@@ -1,3 +1,5 @@
+using System;
+using System.Threading.Tasks;
 using ArcGIS.Desktop.Framework;
 using ArcGIS.Desktop.Framework.Contracts;
 
@@ -28,7 +30,7 @@ namespace SAM3Interactive
         /// tool knows to rebuild its work area with the new model.</summary>
         public static int SettingsVersion { get; private set; }
 
-        /// <summary>Current inference engine ("sam" | "ritm"),
+        /// <summary>Current inference engine ("ritm" | "sam"),
         /// initialised from config.json.</summary>
         public static string CurrentEngine
         {
@@ -54,8 +56,14 @@ namespace SAM3Interactive
         private static void LoadModelSelection()
         {
             var cfg = ServerConfig.Load();
+            // RITM is the default: it loads in a second or two, runs
+            // fine on the CPU and needs no image embedding, so the
+            // first click comes back fast. The much heavier SAM
+            // weights are only loaded once SAM is picked in the
+            // ribbon. Without the RITM weights, fall back to SAM.
             _engine = string.IsNullOrWhiteSpace(cfg.Engine)
-                ? "sam" : cfg.Engine;
+                ? (cfg.HasRitmCheckpoint() ? "ritm" : "sam")
+                : cfg.Engine;
             _modelId = string.IsNullOrWhiteSpace(cfg.ModelId)
                 ? "facebook/sam2.1-hiera-tiny" : cfg.ModelId;
         }
@@ -79,12 +87,54 @@ namespace SAM3Interactive
             {
                 // Persisting is best-effort; the in-memory choice wins.
             }
+            // Load the newly picked model right away instead of making
+            // the next click pay for it - this is what keeps SAM out of
+            // memory until it is actually selected.
+            SamServerManager.RequestWarm(engine, modelId);
+        }
+
+        protected override bool Initialize()
+        {
+            _ = AutoStartServerAsync();
+            return base.Initialize();
+        }
+
+        /// <summary>Bring the server up in the background while the
+        /// user is still setting up the map, so switching to Click
+        /// Segment never waits. Skipped when the add-in is not
+        /// configured yet or auto_start_server is false.</summary>
+        private static async Task AutoStartServerAsync()
+        {
+            try
+            {
+                // Let ArcGIS Pro finish its own start-up first: the
+                // Python process imports arcpy and torch and would
+                // otherwise compete with it for disk and CPU.
+                await Task.Delay(TimeSpan.FromSeconds(10))
+                    .ConfigureAwait(false);
+                if (_unloading)
+                    return;   // Pro closed again before we got here
+                var cfg = ServerConfig.Load();
+                if (!cfg.AutoStartServer || cfg.Validate() != null)
+                    return;
+                await SamServerManager.EnsureRunningAsync()
+                    .ConfigureAwait(false);
+                if (_unloading)
+                    SamServerManager.Stop();
+            }
+            catch
+            {
+                // Best effort: the tool starts the server on demand.
+            }
         }
 
         protected override bool CanUnload() => true;
 
+        private static volatile bool _unloading;
+
         protected override void Uninitialize()
         {
+            _unloading = true;
             SamServerManager.Stop();
             base.Uninitialize();
         }

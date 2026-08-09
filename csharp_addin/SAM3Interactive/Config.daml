@@ -1,7 +1,7 @@
 <ArcGIS defaultAssembly="SAM3Interactive.dll" defaultNamespace="SAM3Interactive" xmlns="http://schemas.esri.com/DADF/Registry" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schemas.esri.com/DADF/Registry file:///C:/Program%20Files/ArcGIS/Pro/bin/ArcGIS.Desktop.Framework.xsd">
-  <AddInInfo id="{8f3b0f0a-9c1e-4f5d-b1a2-6d9d1e7c4a55}" version="2.5.0" desktopVersion="3.6">
+  <AddInInfo id="{8f3b0f0a-9c1e-4f5d-b1a2-6d9d1e7c4a55}" version="2.6.0" desktopVersion="3.6">
     <Name>SAM Interactive Segmentation</Name>
-    <Description>TagLab-style real-time positive/negative click segmentation (SAM2.1 / SAM3 / RITM). Left-click = positive, right-click = negative, Space = save polygon.</Description>
+    <Description>TagLab-style real-time positive/negative click segmentation (RITM / SAM2.1 / SAM3). Left-click = positive, right-click = negative, Space = save polygon.</Description>
     <Image>Images\AddinDesktop32.png</Image>
     <Author>ArcGIS_SAM_plugin</Author>
     <Company>ArcGIS_SAM_plugin</Company>
@@ -60,7 +60,7 @@
           <tooltip heading="Clear Points">Remove all points and the preview but keep the work area (same as Esc), so the next object segments instantly.</tooltip>
         </button>
         <button id="SAM3Interactive_StartServerButton" caption="Start Server" className="StartServerButton" loadOnClick="true" smallImage="GenericButtonGreen16" largeImage="GenericButtonGreen32">
-          <tooltip heading="Start the SAM inference server">Start the background Python inference server (sam3_env environment) and preload the selected model. SAM2.1-tiny / RITM take a few seconds up to ~20 s.</tooltip>
+          <tooltip heading="Start the SAM inference server">Start the background Python inference server (sam3_env environment) and preload the selected model. RITM / SAM2.1-tiny take a few seconds up to ~20 s. Normally not needed: the server starts on its own shortly after ArcGIS Pro launches (auto_start_server in the settings file).</tooltip>
         </button>
         <button id="SAM3Interactive_StopServerButton" caption="Stop Server" className="StopServerButton" loadOnClick="true" smallImage="GenericButtonRed16" largeImage="GenericButtonRed32">
           <tooltip heading="Stop the SAM inference server">Stop the background inference server and free the GPU memory.</tooltip>
@@ -75,7 +75,7 @@
           <tooltip heading="Target Polygon Layer">Polygons confirmed with Space (or the panel 'Save' button) are written to this layer.</tooltip>
         </comboBox>
         <comboBox id="SAM3Interactive_ModelCombo" caption="Model:" className="ModelComboBox" itemWidth="180" isEditable="false" isReadOnly="true" resizable="true">
-          <tooltip heading="Inference Model">Switch the segmentation model; the choice is saved automatically: SAM2.1 Tiny (default, fast), SAM2.1 Small (more accurate), SAM3 (heaviest, needs a Hugging Face login), RITM (TagLab coral-finetuned, fast on CPU). Takes effect with the next work area.</tooltip>
+          <tooltip heading="Inference Model">Switch the segmentation model; the choice is saved automatically: RITM (default, TagLab coral-finetuned, fast on CPU), SAM2.1 Tiny (fast), SAM2.1 Small (more accurate), SAM3 (heaviest, needs a Hugging Face login). A SAM model is only loaded once you pick it here; loading starts immediately in the background and takes effect with the next work area.</tooltip>
         </comboBox>
       </controls>
       <embeddableControls>

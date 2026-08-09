@@ -11,6 +11,11 @@ namespace SAM3Interactive
     {
         private static Process _process;
         private static readonly object Gate = new object();
+        // Non-null while a start is in flight; shared by every caller
+        // so the tool, the ribbon and the first click never start the
+        // server (or wait for it) twice.
+        private static Task<string> _startTask;
+        private static bool _ready;
 
         public static ServerConfig Config { get; private set; }
 
@@ -25,16 +30,67 @@ namespace SAM3Interactive
             }
         }
 
+        /// <summary>True when the server answered /ping and has not
+        /// exited since - callers can skip the "starting ..." wait.</summary>
+        public static bool IsReady
+        {
+            get
+            {
+                lock (Gate)
+                {
+                    return _ready &&
+                           (_process == null || !_process.HasExited);
+                }
+            }
+        }
+
         /// <summary>Make sure the server is reachable; start it when
-        /// needed. Returns null on success, else a user-facing error.</summary>
-        public static async Task<string> EnsureRunningAsync(
+        /// needed. Returns null on success, else a user-facing error.
+        /// Cheap to call repeatedly: a ready server returns instantly
+        /// and concurrent callers share one start.</summary>
+        public static Task<string> EnsureRunningAsync(
             Action<string> progress = null)
+        {
+            lock (Gate)
+            {
+                if (_ready && _process != null && !_process.HasExited)
+                    return Task.FromResult<string>(null);
+                if (_startTask != null && !_startTask.IsCompleted)
+                    return _startTask;
+                _startTask = StartAndWaitAsync(progress);
+                return _startTask;
+            }
+        }
+
+        /// <summary>Ask a running server to preload an engine/model in
+        /// the background (fire and forget). Does nothing when the
+        /// server is not up yet - it warms the selected model at start
+        /// anyway.</summary>
+        public static void RequestWarm(string engine, string modelId)
+        {
+            if (!IsReady)
+                return;
+            var cfg = Config ?? ServerConfig.Load();
+            _ = SamServerClient.WarmAsync(cfg.Port, new WarmRequest
+            {
+                Engine = engine,
+                ModelId = modelId,
+                RitmCheckpoint = cfg.RitmCheckpoint,
+            });
+        }
+
+        private static async Task<string> StartAndWaitAsync(
+            Action<string> progress)
         {
             Config = ServerConfig.Load();
 
             var ping = await SamServerClient.PingAsync(Config.Port);
             if (ping != null && ping.Ok)
+            {
+                lock (Gate)
+                    _ready = true;
                 return null;
+            }
 
             var invalid = Config.Validate();
             if (invalid != null)
@@ -59,18 +115,25 @@ namespace SAM3Interactive
                 }
             }
 
-            // Wait for /ping. Plain startup is a few seconds; importing
-            // torch on a slow disk can take longer.
+            // Wait for /ping. The server answers as soon as it is
+            // listening - torch, arcpy and the model load afterwards in
+            // its warm-up thread - so poll in short steps instead of
+            // wasting a whole second on a server that is already up.
             progress?.Invoke("Waiting for the SAM server ...");
-            for (var i = 0; i < 120; i++)
+            var deadline = DateTime.UtcNow.AddSeconds(120);
+            while (DateTime.UtcNow < deadline)
             {
-                await Task.Delay(1000);
+                ping = await SamServerClient.PingAsync(Config.Port, 1000);
+                if (ping != null && ping.Ok)
+                {
+                    lock (Gate)
+                        _ready = true;
+                    return null;
+                }
                 if (!IsProcessAlive)
                     return "The Python server exited unexpectedly. " +
                            "Check the log:\n" + ServerConfig.LogPath;
-                ping = await SamServerClient.PingAsync(Config.Port);
-                if (ping != null && ping.Ok)
-                    return null;
+                await Task.Delay(250);
             }
             return "The Python server did not answer within 120 s. " +
                    "Check the log:\n" + ServerConfig.LogPath;
@@ -127,6 +190,8 @@ namespace SAM3Interactive
             {
                 proc = _process;
                 _process = null;
+                _ready = false;
+                _startTask = null;
             }
             if (proc == null)
                 return;

@@ -70,10 +70,20 @@ namespace SAM3Interactive
         public List<List<double[]>> Rings { get; set; }
     }
 
+    /// <summary>Preload a model without touching the work area.</summary>
+    internal class WarmRequest
+    {
+        [JsonPropertyName("engine")] public string Engine { get; set; }
+        [JsonPropertyName("model_id")] public string ModelId { get; set; }
+        [JsonPropertyName("ritm_checkpoint")] public string RitmCheckpoint { get; set; }
+    }
+
     internal class PingResponse
     {
         [JsonPropertyName("ok")] public bool Ok { get; set; }
+        /// <summary>starting | warming | ready</summary>
         [JsonPropertyName("status")] public string Status { get; set; }
+        [JsonPropertyName("engine")] public string Engine { get; set; }
         [JsonPropertyName("device")] public string Device { get; set; }
     }
 
@@ -132,6 +142,21 @@ namespace SAM3Interactive
         public static Task<PredictResponse> PredictAsync(
             int port, PredictRequest req) =>
             PostAsync<PredictResponse>(port, "/predict", req);
+
+        /// <summary>Returns as soon as the load has been scheduled; the
+        /// server warms the model in a background thread.</summary>
+        public static async Task WarmAsync(int port, WarmRequest req)
+        {
+            try
+            {
+                await PostAsync<PingResponse>(port, "/warm", req);
+            }
+            catch
+            {
+                // Best effort: the model is loaded on the next
+                // set_image anyway.
+            }
+        }
 
         public static async Task ShutdownAsync(int port)
         {

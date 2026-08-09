@@ -12,6 +12,11 @@ for %%I in ("%REPO_DIR%") do set "REPO_DIR=%%~fI"
 set "PYTHON_EXE=%LOCALAPPDATA%\ESRI\conda\envs\sam3_env\python.exe"
 set "SERVER_SCRIPT=%REPO_DIR%\python_server\sam_server.py"
 set "CFG_DIR=%LOCALAPPDATA%\SAM3Interactive"
+set "RITM_CKPT=%REPO_DIR%\models\ritm_corals.pth"
+
+REM RITM is the default engine (small, CPU-friendly, no embedding
+REM pass). Without its weights, fall back to SAM.
+if exist "%RITM_CKPT%" (set "ENGINE=ritm") else (set "ENGINE=sam")
 
 if not exist "%PYTHON_EXE%" (
     echo [WARN] sam3_env python not found at:
@@ -28,7 +33,7 @@ if not exist "%SERVER_SCRIPT%" (
 if not exist "%CFG_DIR%" mkdir "%CFG_DIR%"
 
 powershell -NoProfile -Command ^
-  "$cfg = [ordered]@{ python_exe = '%PYTHON_EXE%'; server_script = '%SERVER_SCRIPT%'; port = 8765; engine = 'sam'; model_id = 'facebook/sam2.1-hiera-tiny'; ritm_checkpoint = '%REPO_DIR%\models\ritm_corals.pth'; max_image_size = 2048 };" ^
+  "$cfg = [ordered]@{ python_exe = '%PYTHON_EXE%'; server_script = '%SERVER_SCRIPT%'; port = 8765; engine = '%ENGINE%'; model_id = 'facebook/sam2.1-hiera-tiny'; ritm_checkpoint = '%RITM_CKPT%'; max_image_size = 2048; auto_start_server = $true };" ^
   "$cfg | ConvertTo-Json | Set-Content -Encoding utf8 '%CFG_DIR%\config.json'"
 
 if errorlevel 1 (

@@ -5,9 +5,12 @@
 DEFAULT_MODEL_ID = "facebook/sam3"
 
 # Interactive (click) segmentation defaults used by the C# add-in server.
-# engine: "sam" (Hugging Face SAM2/SAM3 point prompts) or "ritm"
-# (TagLab's RITM network - run scripts\get_ritm.bat first).
-DEFAULT_INTERACTIVE_ENGINE = "sam"
+# engine: "ritm" (TagLab's RITM network, shipped with the installer) or
+# "sam" (Hugging Face SAM2/SAM3 point prompts).
+# RITM is the default: it is small (~39 MB), CPU-friendly and needs no
+# image embedding, so the work area is ready almost instantly. The SAM
+# weights are only downloaded / loaded once SAM is picked in the ribbon.
+DEFAULT_INTERACTIVE_ENGINE = "ritm"
 # sam2.1-hiera-tiny: ~155 MB, NOT gated, loads in seconds - much lighter
 # than SAM3 while click quality stays SAM-grade.
 DEFAULT_INTERACTIVE_MODEL_ID = "facebook/sam2.1-hiera-tiny"

@@ -8,6 +8,7 @@
 #   POST /set_image  -> export the view extent from the raster and
 #                       compute the image embedding (TagLab work area)
 #   POST /predict    -> masks for the current positive/negative clicks
+#   POST /warm       -> preload an engine/model in the background
 #   POST /reset      -> drop the current work area
 #   POST /shutdown   -> terminate the server
 #
@@ -26,7 +27,7 @@ import sys
 import threading
 import time
 import traceback
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(SERVER_DIR)
@@ -46,38 +47,77 @@ STATE = {
     "session": None,   # engine.InteractiveSession | ritm_engine.RitmSession
     "geo": None,       # geoutils.GeoInfo of the exported image
     "status": "starting",   # starting | warming | ready
+    "warm": None,      # (engine, model id / checkpoint) being preloaded
+    "device": None,    # filled in by the warmup thread
 }
 
 # Serializes model loading / inference between the warmup thread and
 # request handling.
 INFER_LOCK = threading.Lock()
+# Guards STATE["warm"] so the same model is never warmed twice.
+WARM_LOCK = threading.Lock()
 
 
-def _warmup(engine_name, model_id, ritm_checkpoint):
-    """Preload the heavy bits in the background right after start so
-    the first click in ArcGIS Pro is fast: arcpy (needed for the image
-    export) and the selected model."""
-    STATE["status"] = "warming"
+def _warm_target(engine_name, model_id, ritm_checkpoint):
+    """Normalise a warm request into ("sam"|"ritm", model ref)."""
+    engine_name = (engine_name or
+                   config.DEFAULT_INTERACTIVE_ENGINE).lower()
+    if engine_name == "ritm":
+        return ("ritm", ritm_checkpoint or _default_ritm_checkpoint())
+    return ("sam", model_id or config.DEFAULT_INTERACTIVE_MODEL_ID)
+
+
+def start_warmup(engine_name, model_id, ritm_checkpoint):
+    """Preload the heavy bits in the background so the first click in
+    ArcGIS Pro is fast: arcpy (needed for the image export) and the
+    requested model. Returns the target being warmed; a target that is
+    already loaded (or loading) is not warmed twice.
+
+    Called at start-up with the model the add-in has selected, and
+    again via /warm when the user picks another model in the ribbon -
+    that way SAM weights are only ever loaded when SAM is chosen."""
+    target = _warm_target(engine_name, model_id, ritm_checkpoint)
+    with WARM_LOCK:
+        if STATE["warm"] == target:
+            return target
+        STATE["warm"] = target
+        STATE["status"] = "warming"
+    threading.Thread(target=_warmup, args=target, daemon=True).start()
+    return target
+
+
+def _warmup(kind, ref):
+    # arcpy and the model are preloaded independently: right after
+    # ArcGIS Pro starts arcpy may not be licensed yet, and that must
+    # not cost us the model preload (handle_set_image imports arcpy
+    # again anyway).
     try:
         _log("warmup: importing arcpy ...")
         import sam3_tools.geoutils  # noqa: F401  (imports arcpy)
         _log("warmup: arcpy ready")
-        with INFER_LOCK:
-            if (engine_name or "").lower() == "ritm":
-                import sam3_tools.ritm_engine as ritm_engine
-                checkpoint = ritm_checkpoint or _default_ritm_checkpoint()
-                if os.path.exists(checkpoint):
-                    _log("warmup: loading RITM model ...")
-                    ritm_engine._load_model(checkpoint)
-                else:
-                    _log("warmup: RITM checkpoint missing, skipped")
-            else:
-                mid = model_id or config.DEFAULT_INTERACTIVE_MODEL_ID
-                _log("warmup: loading SAM model {0} ...".format(mid))
-                engine._load_interactive_model(mid)
-        _log("warmup: done ({0})".format(engine.describe_device()))
     except Exception as exc:
-        _log("warmup failed (non-fatal): {0}".format(exc))
+        _log("warmup: arcpy not ready ({0}) - retried with the first "
+             "work area".format(exc))
+    try:
+        with INFER_LOCK:
+            if kind == "ritm":
+                import sam3_tools.ritm_engine as ritm_engine
+                if os.path.exists(ref):
+                    _log("warmup: loading RITM model ...")
+                    ritm_engine._load_model(ref)
+                else:
+                    _log("warmup: RITM checkpoint missing, skipped: "
+                         "{0}".format(ref))
+            else:
+                _log("warmup: loading SAM model {0} ...".format(ref))
+                engine._load_interactive_model(ref)
+        STATE["device"] = engine.describe_device()
+        _log("warmup: done ({0})".format(STATE["device"]))
+    except Exception as exc:
+        _log("warmup: model preload failed (non-fatal): {0}".format(exc))
+        with WARM_LOCK:
+            if STATE["warm"] == (kind, ref):
+                STATE["warm"] = None      # let a later /warm retry
     finally:
         STATE["status"] = "ready"
 
@@ -111,6 +151,11 @@ def _make_session(engine_name, model_id, ritm_checkpoint):
             session = engine.InteractiveSession(model_id=model_id)
     STATE["engine"] = engine_name
     STATE["session"] = session
+    # The model this session uses is loaded now - remember it so a
+    # later /warm for the same model is a no-op.
+    with WARM_LOCK:
+        STATE["warm"] = _warm_target(engine_name, model_id,
+                                     ritm_checkpoint)
     return session
 
 
@@ -120,19 +165,28 @@ def _log(msg):
 
 
 def handle_ping(_payload):
-    device = None
-    try:
-        if engine._CACHE.get("interactive") is not None:
-            device = engine.describe_device()
-    except Exception:
-        device = None
+    # Never touch torch here: /ping must answer instantly, also while
+    # the warmup thread is still importing it.
+    warm = STATE["warm"]
     return {
         "ok": True,
         "status": STATE["status"],
         "engine": STATE["engine"],
+        "warm_engine": warm[0] if warm else None,
         "has_image": bool(STATE["session"] and STATE["session"].has_image),
-        "device": device,
+        "device": STATE["device"],
     }
+
+
+def handle_warm(payload):
+    """Preload an engine/model without touching the work area, so
+    picking another model in the ribbon does not cost the next click
+    the load time."""
+    kind, ref = start_warmup(payload.get("engine"),
+                             payload.get("model_id"),
+                             payload.get("ritm_checkpoint"))
+    return {"ok": True, "status": STATE["status"], "engine": kind,
+            "target": ref}
 
 
 def handle_set_image(payload):
@@ -176,13 +230,14 @@ def handle_set_image(payload):
         session.set_image(rgb)
     t_encode = time.perf_counter() - t0
     STATE["geo"] = geo
+    STATE["device"] = engine.describe_device()
     _log("work area set: {0} x {1} px (export {2:.1f}s, "
          "encode {3:.1f}s)".format(geo.n_cols, geo.n_rows,
                                    t_export, t_encode))
 
     return {
         "ok": True,
-        "device": engine.describe_device(),
+        "device": STATE["device"],
         "image": {
             "cols": geo.n_cols,
             "rows": geo.n_rows,
@@ -198,12 +253,6 @@ def handle_set_image(payload):
 
 
 def handle_predict(payload):
-    session = STATE["session"]
-    geo = STATE["geo"]
-    if session is None or not session.has_image or geo is None:
-        return {"ok": False,
-                "error": "No work area. Call set_image first."}
-
     points = payload["points"]   # [[col, row], ...] pixel coords
     labels = payload["labels"]   # [1|0, ...]
     if not points or not any(int(l) == 1 for l in labels):
@@ -211,7 +260,14 @@ def handle_predict(payload):
                 "error": "At least one positive click is required."}
 
     t0 = time.perf_counter()
+    # Session and geo are read under the lock so a /set_image running
+    # in another thread cannot swap the work area mid-prediction.
     with INFER_LOCK:
+        session = STATE["session"]
+        geo = STATE["geo"]
+        if session is None or not session.has_image or geo is None:
+            return {"ok": False,
+                    "error": "No work area. Call set_image first."}
         mask, score = session.predict(points, labels)
     _log("predict: {0} click(s), {1:.2f}s".format(
         len(points), time.perf_counter() - t0))
@@ -243,8 +299,23 @@ ROUTES = {
     "/ping": handle_ping,
     "/set_image": handle_set_image,
     "/predict": handle_predict,
+    "/warm": handle_warm,
     "/reset": handle_reset,
 }
+
+
+class Server(ThreadingHTTPServer):
+    """Threading server: /ping and /warm stay answerable while a long
+    /set_image is running (INFER_LOCK still serializes inference)."""
+
+    def handle_error(self, request, client_address):
+        # A client dropping an idle keep-alive connection is normal;
+        # do not dump a traceback into server.log for it.
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, ConnectionAbortedError,
+                            BrokenPipeError)):
+            return
+        ThreadingHTTPServer.handle_error(self, request, client_address)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -304,14 +375,11 @@ def main():
                         help="RITM checkpoint to preload")
     args = parser.parse_args()
 
-    server = HTTPServer(("127.0.0.1", args.port), Handler)
+    server = Server(("127.0.0.1", args.port), Handler)
     _log("listening on http://127.0.0.1:{0}".format(args.port))
 
-    threading.Thread(
-        target=_warmup,
-        args=(args.warm_engine, args.warm_model,
-              args.warm_ritm_checkpoint),
-        daemon=True).start()
+    start_warmup(args.warm_engine, args.warm_model,
+                 args.warm_ritm_checkpoint)
 
     try:
         server.serve_forever()

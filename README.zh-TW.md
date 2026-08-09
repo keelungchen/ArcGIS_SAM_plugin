@@ -58,24 +58,31 @@ Windows 10/11）。
 ### 互動增益集
 
 - **即時點擊分割** — 左鍵 = 正點、右鍵 = 負點；每點一次遮罩預覽就重繪。
-- **功能區模型下拉選單** — 可在 SAM 2.1 Tiny、SAM 2.1 Small、SAM 3、
-  RITM 之間切換，**不需要編輯任何設定檔**，選擇會自動保存。
+- **功能區模型下拉選單** — 可在 RITM、SAM 2.1 Tiny、SAM 2.1 Small、
+  SAM 3 之間切換，**不需要編輯任何設定檔**，選擇會自動保存；切換後
+  新模型會立刻在背景開始載入，不會讓你的下一次點擊等待。
 - **凍結工作區** — 第一次點擊時擷取範圍並快取其 embedding，之後的點擊
   幾乎是即時反應。
 - **地圖疊加面板** — 顯示目前模型、點擊數量、信心分數與狀態，並有
   儲存／清除點擊／重設工作區按鈕。
 - **快速鍵**：`Space` = 存成多邊形、`Ctrl+Z` = 復原上一次點擊、
   `Esc` = 清除所有點擊（工作區保留）。
-- **背景預熱** — 你在設定圖層的同時，arcpy 與模型已在背景載入。
+- **背景預熱** — ArcGIS Pro 啟動幾秒後推論伺服器就會自動啟動，並在
+  背景載入 arcpy 與所選模型，因此切換到 *Click Segment* 不需要等待。
+  想關閉可在 `config.json` 設 `"auto_start_server": false`。
 
 ### 推論引擎
 
 | 引擎 | 模型 | 大小 | 需授權？ | 說明 |
 |---|---|---|---|---|
-| `sam`（預設） | `facebook/sam2.1-hiera-tiny` | 約 155 MB | **否** | 幾秒內載入、不需預熱，點擊品質仍是 SAM 等級 |
+| `ritm`（預設） | `ritm_corals.pth` | 約 39 MB | 否 | TagLab 針對珊瑚微調的點擊網路；一兩秒載入、對 CPU 友善、幾乎不吃 VRAM，且不需要 embedding 階段 |
+| `sam` | `facebook/sam2.1-hiera-tiny` | 約 155 MB | **否** | 幾秒內載入，點擊品質是 SAM 等級 |
 | `sam` | `facebook/sam2.1-hiera-small` | 約 185 MB | **否** | 品質略好 |
 | `sam` | `facebook/sam3` | 數 GB | **是** | 品質最好且支援文字提示；需接受 Meta 授權條款 |
-| `ritm` | `ritm_corals.pth` | 約 39 MB | 否 | TagLab 針對珊瑚微調的點擊網路；對 CPU 友善、幾乎不吃 VRAM |
+
+SAM 權重只有在你真的於功能區選了 SAM 模型時才會下載／載入 — 預設的
+RITM 設定完全不會碰到它們。若缺少 `models/ritm_corals.pth`，增益集會
+自動退回 `facebook/sam2.1-hiera-tiny`。
 
 ---
 
@@ -101,7 +108,8 @@ Windows 10/11）。
 
 ### 3.1 Hugging Face 存取權杖（僅 `facebook/sam3` 需要）
 
-預設引擎 `facebook/sam2.1-hiera-tiny` **不受管制**，完全不需要登入。
+預設引擎 `ritm` 與備援的 `facebook/sam2.1-hiera-tiny` 都 **不受管制**，
+完全不需要登入。
 只有當你想使用 SAM 3 時才需要權杖 — SAM 3 是文字提示分割（工具 1）
 以及最高品質點擊結果的基礎。
 
@@ -342,7 +350,7 @@ INSTALL.bat -CpuOnly    :: 強制安裝 CPU 版 PyTorch
 | 常數 | 預設值 | 意義 |
 |---|---|---|
 | `DEFAULT_MODEL_ID` | `facebook/sam3` | 地理處理工具使用的模型 |
-| `DEFAULT_INTERACTIVE_ENGINE` | `sam` | `sam` 或 `ritm` |
+| `DEFAULT_INTERACTIVE_ENGINE` | `ritm` | `ritm` 或 `sam` |
 | `DEFAULT_INTERACTIVE_MODEL_ID` | `facebook/sam2.1-hiera-tiny` | 增益集使用的模型 |
 | `RITM_CHECKPOINT_FILENAME` | `ritm_corals.pth` | 在 `models\` 內尋找 |
 | `DEFAULT_MAX_IMAGE_SIZE` | `2048` | 送進模型的影像長邊像素 |
@@ -364,10 +372,11 @@ INSTALL.bat -CpuOnly    :: 強制安裝 CPU 版 PyTorch
   "python_exe":      "C:\\Users\\<你的使用者名稱>\\AppData\\Local\\ESRI\\conda\\envs\\sam3_env\\python.exe",
   "server_script":   "<你的-repo-路徑>\\python_server\\sam_server.py",
   "port":            8765,
-  "engine":          "sam",
+  "engine":          "ritm",
   "model_id":        "facebook/sam2.1-hiera-tiny",
   "ritm_checkpoint": "<你的-repo-路徑>\\models\\ritm_corals.pth",
-  "max_image_size":  2048
+  "max_image_size":  2048,
+  "auto_start_server": true
 }
 ```
 
@@ -477,6 +486,16 @@ docs/
 ---
 
 ## 14. 版本紀錄
+
+### 2.6.0 — 2026-08-08
+啟動延遲最佳化。**預設引擎改為 RITM**（小、對 CPU 友善、不需 embedding
+階段）；SAM 權重只有在功能區真的選了 SAM 模型時才會載入，而且一選就
+立刻在背景預先載入。推論伺服器會在 **ArcGIS Pro 啟動約 10 秒後自行
+啟動**，並在背景載入 arcpy 與模型（可用 `"auto_start_server": false`
+關閉）。切換到 *Click Segment* 不再跳出擋畫面的「Starting the server」
+對話框、也不再等待——伺服器在背景就緒，第一次點擊會接上同一個工作。
+伺服器端：新增 `/warm` 端點、改用多執行緒 HTTP 伺服器（長時間
+`set_image` 期間 `/ping` 仍可回應），啟動輪詢由每秒一次改為每 250 毫秒。
 
 ### 2.2.0 — 2026-07-05
 UI 全面翻新：中文功能區（`SAM 分割` 頁籤）、**模型下拉選單**

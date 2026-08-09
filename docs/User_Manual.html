@@ -69,7 +69,7 @@
 
 <header>
   <h1>SAM3 Segmentation Toolbox for ArcGIS Pro</h1>
-  <p>以 SAM / RITM 深度學習模型在 ArcGIS Pro 中進行影像分割 — 安裝、使用與更新手冊（v2.2.0，適用 ArcGIS Pro 3.x，含 3.6.1）</p>
+  <p>以 SAM / RITM 深度學習模型在 ArcGIS Pro 中進行影像分割 — 安裝、使用與更新手冊（v2.6.0，適用 ArcGIS Pro 3.x，含 3.6.1）</p>
 </header>
 
 <nav>
@@ -337,8 +337,8 @@ python "此專案路徑\scripts\check_install.py"</code></pre>
 <li><strong>工作區（Work Area）</strong>：啟用工具後<strong>第一次點擊</strong>時，會把「目前地圖視窗範圍」凍結為工作區（地圖上顯示<strong>白色虛線框</strong>），只把這塊影像送進模型——超大影像（大型正射鑲嵌）也能即時反應。放大越多、邊界越準。</li>
 <li><strong>可切換的後端引擎</strong>（見 5.5）：
   <ul>
-  <li><strong>SAM</strong>（預設 <code>facebook/sam2.1-hiera-tiny</code>，~155MB、<strong>免申請授權</strong>、載入數秒）：工作區建立時計算一次影像 embedding，之後每次點擊只跑輕量解碼器，毫秒級回饋。</li>
-  <li><strong>RITM</strong>（<code>ritm_corals.pth</code>，~130MB）：<strong>與 TagLab 正負點工具完全相同的網路與珊瑚微調權重</strong>，每次點擊跑一次小網路（含上一次遮罩的迭代修正），CPU 也順，幾乎不佔 VRAM。</li>
+  <li><strong>RITM</strong>（<strong>預設</strong>，<code>ritm_corals.pth</code>，~130MB）：<strong>與 TagLab 正負點工具完全相同的網路與珊瑚微調權重</strong>，每次點擊跑一次小網路（含上一次遮罩的迭代修正），CPU 也順，幾乎不佔 VRAM，而且<strong>不需要 embedding 階段</strong>，所以工作區幾乎馬上就緒。</li>
+  <li><strong>SAM</strong>（<code>facebook/sam2.1-hiera-tiny</code>，~155MB、<strong>免申請授權</strong>、載入數秒）：工作區建立時計算一次影像 embedding，之後每次點擊只跑輕量解碼器，毫秒級回饋。<strong>SAM 權重只有在你於 Model 下拉選單真的選了 SAM 才會載入。</strong></li>
   </ul></li>
 <li><kbd>Esc</kbd> 只會<strong>清除目前的正負點</strong>，工作區（與已算好的影像 embedding）會保留，可立即重新點擊。要換到新的視窗範圍，請按功能區的 <strong>New Work Area</strong>（以目前視窗重建工作區）或 <strong>Cancel Work Area</strong>（純粹取消）。</li>
 <li>點到工作區（白色虛線框）<strong>外面</strong>時，該點會被忽略並跳出提醒，<strong>不會</strong>重建工作區——不用擔心誤點浪費時間。</li>
@@ -353,7 +353,7 @@ python "此專案路徑\scripts\check_install.py"</code></pre>
 <ol class="big">
 <li>先完成<a href="#install">第 3 章</a>的 Python 環境安裝（<code>sam3_env</code>）。<br>
     <strong>既有環境</strong>補裝一個套件即可：<code>activate sam3_env</code> 後 <code>pip install scikit-image</code>（新版 <code>setup_env.bat</code> 已包含）。<br>
-    <span style="color:#2e7d32">注意：Add-in 預設模型 <code>facebook/sam2.1-hiera-tiny</code> <strong>不需要</strong> Hugging Face 授權申請；第 3 章的授權步驟只有「工具箱的 SAM3 工具」與改用 SAM3 當互動後端時才需要。</span></li>
+    <span style="color:#2e7d32">注意：Add-in 預設引擎 RITM 與備援的 <code>facebook/sam2.1-hiera-tiny</code> 都 <strong>不需要</strong> Hugging Face 授權申請；第 3 章的授權步驟只有「工具箱的 SAM3 工具」與改用 SAM3 當互動後端時才需要。</span></li>
 <li>雙擊 <code>csharp_addin\dist\SAM3Interactive.esriAddinX</code> → 按「Install Add-In」。</li>
 <li>雙擊執行 <code>scripts\install_addin_config.bat</code>，寫入設定檔（Python 路徑、伺服器腳本位置、埠號）。設定檔位於
 <code>%LOCALAPPDATA%\SAM3Interactive\config.json</code>，之後可從功能區的 <strong>Server Settings</strong> 按鈕開啟修改。</li>
@@ -367,9 +367,9 @@ python "此專案路徑\scripts\check_install.py"</code></pre>
 <li>準備一個 <strong>Polygon 目標圖層</strong>加入地圖（建議欄位：<code>Score</code>（Double）、<code>Prompt</code>（Text, 255），有的話會自動填值；沒有也能用）。</li>
 <li>在 <strong>SAM Segmentation</strong> 頁籤：
   <ul>
-  <li>（可選）按 <strong>Start Server</strong> 預先啟動並暖機（會顯示進度視窗）。實測：RITM／SAM2.1-tiny 約 20–60 秒完成暖機（含 arcpy 載入，一次性）；不預先啟動的話，啟用工具時也會自動處理。</li>
+  <li><strong>通常什麼都不用做</strong>：ArcGIS Pro 啟動約 10 秒後，推論伺服器會自己在背景啟動並暖機（含 arcpy 載入與模型，約 20–60 秒，一次性），所以你切到 <strong>Click Segment</strong> 時不必等待。要手動觸發可按 <strong>Start Server</strong>；要完全關掉自動啟動，在 <code>config.json</code> 設 <code>"auto_start_server": false</code>。</li>
   <li><strong>Imagery</strong>：選要分割的影像圖層；<strong>Target</strong>：選結果要寫入的 Polygon 圖層（不選則自動取地圖中第一個符合的圖層）。</li>
-  <li><strong>Model</strong>：直接下拉切換 SAM2.1 Tiny／SAM2.1 Small／SAM3／RITM，<strong>選擇會自動記住，不需改任何設定檔</strong>；切換後從下一個工作區開始生效。</li>
+  <li><strong>Model</strong>：直接下拉切換 RITM（預設）／SAM2.1 Tiny／SAM2.1 Small／SAM3，<strong>選擇會自動記住，不需改任何設定檔</strong>；選了之後新模型會立刻在背景開始載入，並從下一個工作區開始生效。</li>
   </ul></li>
 <li>把地圖<strong>縮放到目標物件</strong>，點 <strong>Click Segment</strong> 啟用工具（或直接按 <strong>New Work Area</strong>，會自動啟用工具並以目前視窗建立工作區）。此時地圖左上角會出現<strong>操作面板</strong>：即時顯示目前模型、正負點數量與分數、下一步提示，並有四個按鈕——<strong>✔ Save</strong>（同空白鍵）、<strong>↶ Undo</strong>（同 Ctrl+Z，退回上一點）、<strong>✖ Clear</strong>（同 Esc，清掉全部點、保留工作區）、<strong>↺ New Area</strong>（以目前視窗重建工作區）。</li>
 <li>開始點擊：
@@ -394,11 +394,13 @@ python "此專案路徑\scripts\check_install.py"</code></pre>
 下表是各選項的特性（進階使用者仍可從「進階設定」直接編輯 <code>%LOCALAPPDATA%\SAM3Interactive\config.json</code>）：</p>
 <table>
 <tr><th>設定</th><th>模型</th><th>特性</th><th>適用</th></tr>
-<tr><td><code>"engine": "sam"</code>（預設）</td><td><code>model_id</code> 指定，預設 <code>facebook/sam2.1-hiera-tiny</code>；也可填 <code>facebook/sam2.1-hiera-small</code> 或 <code>facebook/sam3</code></td><td>載入數秒、每點毫秒級（embedding 快取）、免申請授權（SAM3 除外）</td><td>一般地物（建物、船、農塘、樹冠…）</td></tr>
-<tr><td><code>"engine": "ritm"</code></td><td><code>ritm_checkpoint</code> 指定，預設 <code>models\ritm_corals.pth</code>（TagLab 珊瑚微調權重）</td><td><strong>與 TagLab 正負點工具完全相同</strong>；載入 1–3 秒、CPU 可用、幾乎不會 CUDA OOM</td><td>珊瑚礁／底棲正射影像，或無 GPU 的機器</td></tr>
+<tr><td><code>"engine": "ritm"</code>（預設）</td><td><code>ritm_checkpoint</code> 指定，預設 <code>models\ritm_corals.pth</code>（TagLab 珊瑚微調權重）</td><td><strong>與 TagLab 正負點工具完全相同</strong>；載入 1–3 秒、CPU 可用、幾乎不會 CUDA OOM、不需 embedding 階段</td><td>珊瑚礁／底棲正射影像，或無 GPU 的機器</td></tr>
+<tr><td><code>"engine": "sam"</code></td><td><code>model_id</code> 指定，預設 <code>facebook/sam2.1-hiera-tiny</code>；也可填 <code>facebook/sam2.1-hiera-small</code> 或 <code>facebook/sam3</code></td><td>載入數秒、每點毫秒級（embedding 快取）、免申請授權（SAM3 除外）</td><td>一般地物（建物、船、農塘、樹冠…）</td></tr>
 </table>
+<p><strong>預設是 RITM</strong>：伺服器啟動時只會預先載入 RITM 這個小網路，<strong>不會</strong>去載入或下載 SAM 權重；
+只有當你在 Model 下拉選單選了任一個 SAM 模型時，才會（在背景）載入該模型。若 <code>models\ritm_corals.pth</code> 不存在，則自動退回 <code>facebook/sam2.1-hiera-tiny</code>。</p>
 <p><strong>啟用 RITM（一次性）</strong>：雙擊執行 <code>scripts\get_ritm.bat</code>——會自動下載官方 RITM 原始碼（isegm）、TagLab 的 <code>ritm_corals.pth</code> 權重、
-安裝 <code>opencv-python</code>／<code>easydict</code>，並把設定檔切到 <code>engine = "ritm"</code>。要切回 SAM 只需把 <code>engine</code> 改回 <code>"sam"</code>。</p>
+安裝 <code>opencv-python</code>／<code>easydict</code>，並把設定檔切到 <code>engine = "ritm"</code>。安裝包已內含這份權重，通常不需要另外執行。</p>
 
 <h3>5.5 從原始碼重建 Add-in</h3>
 <p>改了 C# 程式碼、或 ArcGIS Pro 大版本升級後，需重建 <code>.esriAddinX</code>：</p>
@@ -500,6 +502,7 @@ python "專案路徑\scripts\check_install.py"</code></pre>
 <h3>8.6 本插件版本紀錄</h3>
 <table>
 <tr><th>版本</th><th>日期</th><th>內容</th></tr>
+<tr><td><strong>2.6.0</strong></td><td>2026-08-08</td><td><strong>啟動速度最佳化</strong>：預設引擎改為 <strong>RITM</strong>（小、CPU 友善、不需 embedding），SAM 權重<strong>只有選了 SAM 才會載入</strong>；推論伺服器改為在 ArcGIS Pro 啟動約 10 秒後<strong>自動於背景啟動並暖機</strong>（可用 <code>"auto_start_server": false</code> 關閉）；切換到 <strong>Click Segment</strong> 工具<strong>不再跳出擋畫面的「Starting the server」進度視窗、也不再等待</strong>，伺服器在背景就緒；在 Model 下拉選單換模型時會立刻在背景預載新模型；伺服器新增 <code>/warm</code> 端點並改用多執行緒，暖機期間 <code>/ping</code> 仍可即時回應。</td></tr>
 <tr><td><strong>2.2.0</strong></td><td>2026-07-05</td><td>介面大改版：功能區全面中文化（「SAM 分割」頁籤）；新增<strong>「模型」下拉選單</strong>（SAM2.1 Tiny／Small、SAM3、RITM 直接切換並自動記住，不需改設定檔）；工具啟用時地圖上顯示<strong>操作面板</strong>（模型／點數／分數／狀態提示＋儲存、<strong>清除點</strong>、重設區域按鈕）；伺服器啟動與工作區準備加入進度視窗；伺服器啟動時<strong>背景暖機</strong>（預載 arcpy 與模型）。修正：RITM 權重的 <code>models.isegm</code> 命名空間載入錯誤、torch/OpenCV 的 OpenMP 衝突造成的當機（OMP Error #15）、get_ritm.bat 下載失敗未被偵測的問題（RITM 原始庫已下架，改抓 TagLab 內建副本）。</td></tr>
 <tr><td><strong>2.1.0</strong></td><td>2026-07-04</td><td>互動後端<strong>雙引擎化</strong>：預設改為 <code>facebook/sam2.1-hiera-tiny</code>（~155MB、免授權、載入數秒、免暖機），並新增 <strong>RITM 引擎</strong>——與 TagLab 正負點工具<strong>完全相同</strong>的網路與珊瑚微調權重（<code>ritm_corals.pth</code>，CPU 可用、幾乎不佔 VRAM）。設定檔 <code>engine</code> 欄位切換（見 5.4）；新增 <code>scripts\get_ritm.bat</code>、<code>sam3_tools\ritm_engine.py</code>。</td></tr>
 <tr><td><strong>2.0.0</strong></td><td>2026-07-04</td><td>新增 <strong>SAM3 Interactive C# Add-in</strong>：直接在地圖上左鍵正點／右鍵負點、遮罩<strong>即時預覽</strong>，空白鍵確認建立 polygon（互動邏輯比照 TagLab：工作區凍結目前視窗、embedding 快取、Ctrl+Z／Esc）。含本機 Python 推論伺服器（<code>python_server\sam_server.py</code>）、<code>engine.InteractiveSession</code>、<code>masktools.py</code>、建置腳本 <code>build_addin.ps1</code>、設定腳本 <code>install_addin_config.bat</code>。手冊新增第 5 章。</td></tr>
@@ -510,6 +513,6 @@ python "專案路徑\scripts\check_install.py"</code></pre>
 
 </main>
 
-<footer>SAM Segmentation Toolbox &amp; Interactive Add-in v2.2.0 — 2026-07 · 模型：Meta SAM 2.1 / SAM 3、RITM（TagLab 珊瑚權重），各依其授權條款使用</footer>
+<footer>SAM Segmentation Toolbox &amp; Interactive Add-in v2.6.0 — 2026-08 · 模型：Meta SAM 2.1 / SAM 3、RITM（TagLab 珊瑚權重），各依其授權條款使用</footer>
 </body>
 </html>

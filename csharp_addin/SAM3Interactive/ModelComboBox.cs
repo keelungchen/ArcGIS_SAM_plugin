@@ -23,14 +23,17 @@ namespace SAM3Interactive
 
         public ModelComboBox()
         {
-            Add(new Option("SAM2.1 Tiny (fast, default)",
+            // RITM first: it is the default engine and the one that
+            // needs no embedding pass. The SAM entries load their
+            // weights only when picked (see SamModule).
+            Add(new Option("RITM (TagLab corals, default)",
+                "ritm", null));
+            Add(new Option("SAM2.1 Tiny (fast)",
                 "sam", "facebook/sam2.1-hiera-tiny"));
             Add(new Option("SAM2.1 Small (more accurate)",
                 "sam", "facebook/sam2.1-hiera-small"));
             Add(new Option("SAM3 (heaviest, needs HF login)",
                 "sam", "facebook/sam3"));
-            Add(new Option("RITM (TagLab corals)",
-                "ritm", null));
 
             var engine = SamModule.CurrentEngine;
             var modelId = SamModule.CurrentModelId;
